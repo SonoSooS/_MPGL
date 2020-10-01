@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <malloc.h>
 
 #include "GL/ctor.h"
 #include "GL/core.h"
@@ -11,7 +12,7 @@
 #include "player/mmplayer.h"
 
 
-//#define TRACKID
+#define TRACKID
 #define PFACOLOR
 #define PFAKEY
 //#define ROUNDEDGE
@@ -25,6 +26,24 @@
 //#define WIDEMIDI
 //#define TIMI_TIEMR
 //#define ROTAT
+#define GLOW
+//#define SHTIME
+//#define WOBBLE
+//#define WOBBLE_INTERP
+//#define GLOWEDGE
+//#define GLTEXT
+//#define TEXTNPS
+//#define SHNPS
+//#define HDR
+//#define NOKEYBOARD
+
+
+#ifdef PIANOKEYS
+const DWORD keymul = 8;
+#else
+const DWORD keymul = 1;
+#endif
+
 
 const float minheight = (1.0F / 256.0F)
 #ifdef KEYBOARD
@@ -35,9 +54,30 @@ const float minheight = (1.0F / 256.0F)
 #endif
 ;
 
+#ifdef HDR
+__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+#endif
+
+#ifndef HDR
+typedef DWORD KCOLOR;
+#else
+typedef struct { float r, g, b, a; } KCOLOR;
+
+#if defined(GLTEXT) || defined(TEXTNPS)
+#error HDR is incompatible with some modules
+#endif
+#endif
 
 #if defined(ROUNDEDGE) && !defined(DYNASCROLL)
-#define DYNASCROLL
+//#define DYNASCROLL
+#endif
+
+#if defined(ROUNDEDGE) && defined(GLTEXT)
+#error Text rendering is not supported with round edges
+#endif
+
+#if !defined(GLTEXT) && (defined(TEXTNPS))
+#error This feature combination requires GLTEXT
 #endif
 
 #ifdef DYNASCROLL
@@ -55,7 +95,7 @@ const float tickscale = 1.0F / (float)tickheight;
 const DWORD minwidth = tickheight / 32;
 
 #else
-
+const DWORD minwidth = 16;
 #define TICKVAL player->TickCounter
 #define TICKVAR ply->TickCounter
 #endif
@@ -76,24 +116,44 @@ extern HGLRC glctx;
 extern HANDLE vsyncevent;
 extern RECT erect;
 
+extern BOOL canrender;
+
 extern HMODULE KSModule;
 
 GLuint sh;
 GLint attrVertex, attrColor;
+#ifdef SHTIME
+GLint uniTime;
+#endif
+#ifdef HDR
+GLint uniLightAlpha;
+GLint uniLightColor;
+#ifdef TRIPPY
+GLint attrNotemix;
+#endif
+#endif
 
+#ifndef HDR
 struct quadpart
 {
     float x, y;
     GLuint color;
-    GLuint padding;
+    WORD u, v;
 };
+#else
+struct quadpart
+{
+    float x, y;
+    KCOLOR color;
+};
+#endif
 
 struct quad
 {
     struct quadpart quads[ QUADCOUNT ];
 };
 
-void PrintShaderInfo(GLuint shader)
+static void PrintShaderInfo(GLuint shader)
 {
     GLint loglen = 0;
     glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &loglen);
@@ -110,7 +170,7 @@ void PrintShaderInfo(GLuint shader)
     }
 }
 
-void CompileStandardShader()
+static void CompileStandardShader()
 {
     GLuint vsh = glCreateShader(GL_VERTEX_SHADER);
     GLuint psh = glCreateShader(GL_FRAGMENT_SHADER);
@@ -118,6 +178,9 @@ void CompileStandardShader()
     
     const char* shadera =
         "#version 330 core\n"
+    #ifdef SHTIME
+        "uniform float intime;\n"
+    #endif
         "in vec4 incolor;\n"
         "in vec2 inpos;\n"
     #ifndef PFAKEY
@@ -127,9 +190,18 @@ void CompileStandardShader()
     #ifdef TRANSFORM
         "out float zbuf;"
     #endif
-    #ifdef ROUNDEDGE
+    #if defined(ROUNDEDGE) || defined(GLOWEDGE)
         "out vec2 ppos;\n"
         "flat out vec2 fpos;\n"
+    #endif
+    #ifdef HDR
+        "out vec2 npos;\n"
+        #ifdef TRIPPY
+            "out float illum;\n"
+        #endif
+    #endif
+    #ifdef PIANOKEYS
+        "const float divider = 8.0F;\n"
     #endif
         "void main()\n"
         "{\n"
@@ -141,19 +213,29 @@ void CompileStandardShader()
     #ifdef WIDEMIDI
         "   rawpos.x = rawpos.x * 0.5F;\n"
     #endif
+    #ifdef GLOW
+        "   float ill_a = "
     #if defined(TRIPPY) && defined(TRANSFORM)
-        "   pcolor = vec4(incolor.xyz * clamp((-rawpos.y - 0.95F) * 8.0F, 0.0F, 6.0F), incolor.w);\n"
+        "   clamp((-rawpos.y - 0.95F) * 8.0F, 0.0F, 6.0F);\n"
     #elif defined(TRANSFORM)
-        "   pcolor = vec4(incolor.xyz * clamp((-rawpos.y - 0.95F) * 32.0F, 1.0F, 6.0F), incolor.w);\n"
-    #elif defined(TRIPPY)
-        "   pcolor = vec4(incolor.xyz * clamp((-rawpos.y - 0.5F) * 4.0F, 0.0F, 5.6F), incolor.w);\n"
+        "   clamp((-rawpos.y - 0.95F) * 32.0F, 1.0F, 6.0F);\n"
+    #elif defined(TRIPPY) && !defined(HDR)
+        "   clamp((-rawpos.y - 0.5F) * 4.0F, 0.0F, 5.6F);\n"
     #else
-        "   pcolor = vec4(incolor.xyz * clamp((-rawpos.y - 0.865F) * 16.0F, 1.0F, 5.6F), incolor.w);\n"
+        "   clamp((-rawpos.y - 0.865F) * 16.0F, 1.0F, 5.6F);\n"
+    #endif
+        #if defined(HDR) && defined(TRIPPY)
+        "   pcolor = incolor;\n"
+        #else
+        "   pcolor = vec4(incolor.xyz * ill_a, incolor.w);\n"
+        #endif
+    #else
+        "   pcolor = incolor;\n"
     #endif
     #ifdef PIANOKEYS
-        "   vec2 pos = vec2((rawpos.x - (150.0F * 0.5F)) * (2.0F / 150.0F), rawpos.y);\n"
+        "   vec2 pos = vec2((rawpos.x * (4.0F / (150.0F * divider))) - 1.0F, rawpos.y);\n"
     #else
-        "   vec2 pos = vec2((rawpos.x - (128.0F * 0.5F)) * (2.0F / 128.0F), rawpos.y);\n"
+        "   vec2 pos = vec2((rawpos.x * (2.0F / 128.0F)) - 1.0F, rawpos.y);\n"
     #endif
     #ifdef TRANSFORM
         "   float z = min((1.0F - pos.y) * 0.5F, 1.0F);\n"
@@ -163,7 +245,7 @@ void CompileStandardShader()
     #else
         "   vec2 vtxpos = pos;\n"
     #endif
-    #ifdef ROUNDEDGE
+    #if defined(ROUNDEDGE) || defined(GLOWEDGE)
         "   ppos = vtxpos;\n"
         "   fpos = vtxpos;\n"
     #endif
@@ -173,10 +255,28 @@ void CompileStandardShader()
     #else
         "   vtxpos.y = (vtxpos.y * 0.8F) + 0.2F;\n"
     #endif
+        //"   vtxpos.y = pow(vtxpos.y + 1.0F, 1.4F) - 1.0F;"
     #endif
     #ifdef ROTAT
         "   const float PI = 3.1415926535897932384626433832795;\n"
         "   vtxpos = vec2(sin((vtxpos.x + 1.0F) * PI), cos((vtxpos.x + 1.0F) * PI) * (16.0F / 9.0F)) * (((vtxpos.y + 1.0F) * 0.75F) - 0.05F);\n"
+    #endif
+    #ifdef WOBBLE
+        "   vec2 interm = vec2(vtxpos.x + cos(intime*4.0F + vtxpos.x * 8.0F)*0.025F + sin(vtxpos.y + cos(intime)*0.25F * 4.0F)*0.125F, vtxpos.y + cos((sin(intime * 0.8F) + vtxpos.y) * 2.0F)*0.25F + sin(vtxpos.x * 4.0F)*0.125F + sin(vtxpos.y*4.0F + intime*2.769F)*0.025F);\n"
+    #ifdef WOBBLE_INTERP
+        "   float interp_amt = pos.y + 0.02F;\n"
+        "   vtxpos.xy = mix(interm, vtxpos, min(-interp_amt * interp_amt * interp_amt, 1.0F));\n"
+    #else
+        "   vtxpos.xy = interm;\n"
+    #endif
+    #endif
+    #ifdef HDR
+        "   npos = vtxpos.xy;\n"
+        #ifdef TRIPPY
+            #ifdef GLOW
+            "    illum = clamp(((-rawpos.y - 0.95F) * 32.0F), 0.0F, 5.6F);\n"
+            #endif
+        #endif
     #endif
     #ifdef TRANSFORM
         "   gl_Position = vec4(vtxpos.xy, -z, 1.0F);\n"
@@ -193,16 +293,79 @@ void CompileStandardShader()
     #endif
         "in vec4 pcolor;\n"
     #ifdef TRANSFORM
-        "in float zbuf;"
+        "in float zbuf;\n"
     #endif
-    #ifdef ROUNDEDGE
+    #if defined(ROUNDEDGE) || defined(GLOWEDGE)
         "in vec2 ppos;\n"
         "flat in vec2 fpos;\n"
+        "vec3 saturate(vec3 c, float amt)\n"
+        "{\n"
+        "    vec3 gray = vec3(dot(vec3(0.2126F,0.7152F,0.0722F), c));\n"
+        "    return vec3(mix(gray, c, amt));\n"
+        "}\n"
+    #endif
+    #ifdef HDR
+        "in vec2 npos;\n"
+        #ifdef TRIPPY
+        "in float illum;\n"
+        "uniform float notemix;\n"
+        #endif
+        #ifdef WIDEMIDI
+        "uniform float lighta[256];\n"
+        "uniform vec4  lightc[256];\n"
+        #else
+        "uniform float lighta[128];\n"
+        "uniform vec4  lightc[128];\n"
+        #endif
+        "uniform sampler2D blurtex;\n"
+        "vec2 texres = vec2(1.0F / 1280.0F, 1.0F / 720.0F);\n"
+        "vec4 blur(sampler2D tex, vec2 uv)\n"
+        "{\n"
+        "    vec4 color = vec4(0.0F);\n"
+        "    vec2 blurk[3];\n"
+        "    blurk[0] = 1.4117647058823530F * texres;\n"
+        "    blurk[1] = 3.2941176470588234F * texres;\n"
+        "    blurk[2] = 5.1764705882352940F * texres;\n"
+        "    \n"
+        "    color += texture2D(tex, vec2(uv.x,              uv.y - blurk[2].y)) * 0.015302F;\n"
+        "    \n"
+        "    color += texture2D(tex, vec2(uv.x - blurk[0].x, uv.y - blurk[1].y)) * 0.024972F;\n"
+        "    color += texture2D(tex, vec2(uv.x,              uv.y - blurk[1].y)) * 0.028224F;\n"
+        "    color += texture2D(tex, vec2(uv.x + blurk[0].x, uv.y - blurk[1].y)) * 0.024972F;\n"
+        "    \n"
+        "    color += texture2D(tex, vec2(uv.x - blurk[1].x, uv.y - blurk[0].y)) * 0.024972F;\n"
+        "    color += texture2D(tex, vec2(uv.x - blurk[0].x, uv.y - blurk[0].y)) * 0.036054F;\n"
+        "    color += texture2D(tex, vec2(uv.x,              uv.y - blurk[0].y)) * 0.040749F;\n"
+        "    color += texture2D(tex, vec2(uv.x + blurk[0].x, uv.y - blurk[0].y)) * 0.036054F;\n"
+        "    color += texture2D(tex, vec2(uv.x + blurk[1].x, uv.y - blurk[0].y)) * 0.024972F;\n"
+        "    \n"
+        "    color += texture2D(tex, vec2(uv.x - blurk[2].x, uv.y             )) * 0.015302F;\n"
+        "    color += texture2D(tex, vec2(uv.x - blurk[1].x, uv.y             )) * 0.028224F;\n"
+        "    color += texture2D(tex, vec2(uv.x - blurk[0].x, uv.y             )) * 0.040749F;\n"
+        "    color += texture2D(tex, vec2(uv.x,              uv.y             )) * 0.046056F;\n"
+        "    color += texture2D(tex, vec2(uv.x + blurk[0].x, uv.y             )) * 0.040749F;\n"
+        "    color += texture2D(tex, vec2(uv.x + blurk[1].x, uv.y             )) * 0.028224F;\n"
+        "    color += texture2D(tex, vec2(uv.x + blurk[2].x, uv.y             )) * 0.015302F;\n"
+        "    \n"
+        "    color += texture2D(tex, vec2(uv.x - blurk[1].x, uv.y + blurk[0].y)) * 0.024972F;\n"
+        "    color += texture2D(tex, vec2(uv.x - blurk[0].x, uv.y + blurk[0].y)) * 0.036054F;\n"
+        "    color += texture2D(tex, vec2(uv.x,              uv.y + blurk[0].y)) * 0.040749F;\n"
+        "    color += texture2D(tex, vec2(uv.x + blurk[0].x, uv.y + blurk[0].y)) * 0.036054F;\n"
+        "    color += texture2D(tex, vec2(uv.x + blurk[1].x, uv.y + blurk[0].y)) * 0.024972F;\n"
+        "    \n"
+        "    color += texture2D(tex, vec2(uv.x - blurk[0].x, uv.y + blurk[1].y)) * 0.024972F;\n"
+        "    color += texture2D(tex, vec2(uv.x,              uv.y + blurk[1].y)) * 0.028224F;\n"
+        "    color += texture2D(tex, vec2(uv.x + blurk[0].x, uv.y + blurk[1].y)) * 0.024972F;\n"
+        "    \n"
+        "    color += texture2D(tex, vec2(uv.x,              uv.y + blurk[2].y)) * 0.015302F;\n"
+        "    \n"
+        "    return color;\n"
+        "}\n"
     #endif
         "out vec4 outcolor;\n"
         "void main()\n"
         "{\n"
-    #ifdef ROUNDEDGE
+    #if defined(ROUNDEDGE)
         "   vec2 rpos = ppos - fpos;\n"
         "   float af = (64.0F * abs(rpos.x*rpos.y)) + ((rpos.x*rpos.x)+(rpos.y*rpos.y));\n"
         "   float ua = af * 1024.0F;\n"
@@ -212,7 +375,77 @@ void CompileStandardShader()
             " * (0.2F + zbuf)"
         #endif
         ";\n"
-        ""
+    #elif defined(GLOWEDGE)
+        "   vec2 rpos = abs(ppos - fpos);\n"
+        "   float af = rpos.x * rpos.y;\n"
+        "   float ua = af * 1024.0F;\n"
+        "   float a = clamp(1.0F - (ua * ua), 0.0F, 1.0F);\n"
+        "   outcolor = vec4(saturate(pcolor.xyz, ((a * a)) + 1.0F), pcolor.w)"
+        #ifdef TRANSFORM
+            " * (0.2F + zbuf)"
+        #endif
+        ";\n"
+    #elif defined(HDR)
+        "   outcolor = pcolor;//blur(blurtex, gl_FragCoord.xy * texres) + pcolor;\n"
+        "   vec4 lightcolor = vec4(0.0F, 0.0F, 0.0F, 1.0F);\n"
+        #ifdef WIDEMIDI
+        "   for(int i = 0; i < 256; i++)\n"
+        #else
+        "   for(int i = 0; i < 128; i++)\n"
+        #endif
+        "   {\n"
+        #ifdef ROTAT
+        "       const float PI = 3.1415926535897932384626433832795;\n"
+        "       float xpos = (((i - 128) / 64.0F) + 1.0F + (1.0F / 151.0F)) * PI;\n"
+        "       vec2 posdiff = npos - vec2(sin(xpos) * -0.25F, cos(xpos) * -0.25F * (16.0F / 9.0F));\n"
+        #else
+        "       vec2 posdiff = npos - vec2(((i - 128) / 64.0F) + 1.0F + (1.0F / 151.0F), -0.6F);\n"
+        #endif
+        #ifndef TRIPPY
+        //"       vec2 asposdif = posdiff;\n"
+        "       vec2 asposdif = vec2(posdiff.x, posdiff.y * (9.0F / 16.0F));\n"
+        "       float posdist = dot(asposdif, asposdif);\n"
+        "       lightcolor += vec4((lightc[i].xyz * lighta[i]) * min(pow(1.0F / posdist, 1.0F) * (1.0F / 8192.0F), 4.0F), 0.0F);\n"
+        #else
+        "       vec2 asposdif = vec2(posdiff.x, posdiff.y * (1.0F / 4.0F));\n"
+        "       float posdist = dot(asposdif, asposdif);\n"
+        "       lightcolor += vec4((lightc[i].xyz * pow(lighta[i], 1.0F)) * min(pow((0.5F / posdist), 1.0F) * (1.0F / 4096.0F), 4.0F), 0.0F);\n"
+        #endif
+        "   }\n"
+        #if defined(TRIPPY)
+        "   float notea = 1.0F - notemix;\n"
+        //"   float sosi = dot(lightcolor.xyz, pcolor.www) * 8.0F;\n"
+        "   float sosi = max(1.0F, illum);\n"
+        "   outcolor = vec4("
+                //"(lightcolor.xyz * notemix) +"
+                "(pcolor.xyz * vec3(mix(sosi, 1.0F, notea)))"
+                " * (((("
+                        "pow(lightcolor.xyz, vec3(0.8F))"
+                        " * vec3(4.0F))"
+                    " + vec3((1.0F / 64.0F))"
+                    ") * vec3(notea)) + vec3(notemix))"
+            ", outcolor.w);\n"
+        
+        /*
+        "   outcolor = vec4("
+        //"(lightcolor.xyz * notemix) +"
+        "(pcolor.xyz * vec3((notemix * sosi) + 1.0F)) * (((pow(lightcolor.xyz, vec3((notea * -0.25F) + 1.0F)) * ((notea * 0.4F) + 1.0F)) * vec3(notea)) + ((1.0F / 32.0F))), outcolor.w);\n"
+        */
+        #elif defined(TRANSFORM)
+        "   outcolor = vec4(outcolor.xyz * (0.2F + (zbuf*zbuf)), outcolor.w);\n"
+        #else
+        "   outcolor += lightcolor;\n"
+        #endif
+        #ifdef NOKEYBOARD
+            #if defined(ROTAT)
+            "   outcolor = vec4(mix(outcolor.xyz, lightcolor.xyz, clamp((-npos.y - 0.58F) * 32.0F, 0.0F, 1.0F)), outcolor.w);\n"
+            #elif !(defined(HDR) && defined(TRIPPY))
+            "   vec2 corrpos = vec2(npos.x, npos.y * (9.0F / 16.0F));\n"
+            "   outcolor = vec4(mix(outcolor.xyz, lightcolor.xyz, clamp((0.09F - dot(corrpos, corrpos)) * 32.0F, 0.0F, 1.0F)), outcolor.w);\n"
+            #endif
+        #endif
+        //"   outcolor = vec4(pow(outcolor.xyz / (outcolor.xyz + vec3(1.0F)), vec3(1.1F)), outcolor.w);\n"
+        //"   outcolor = vec4(pow(outcolor.xyz, vec3(0.5F)), outcolor.w);\n"
     #else
         "   outcolor = vec4(pcolor.xyz"
         #ifdef TRANSFORM
@@ -269,12 +502,203 @@ void CompileStandardShader()
     if(attrColor < 0)
         puts("incolor not found");
     
+    while(attrVertex < 0 || attrColor < 0)
+        ;
+    
+    #ifdef SHTIME
+    uniTime = glGetUniformLocation(sh, "intime");
+    #endif
+    
+    #ifdef HDR
+    uniLightAlpha = glGetUniformLocation(sh, "lighta");
+    uniLightColor = glGetUniformLocation(sh, "lightc");
+        #ifdef TRIPPY
+        attrNotemix = glGetUniformLocation(sh, "notemix");
+        #endif
+    #endif
+    
     glDetachShader(sh, psh);
     glDetachShader(sh, vsh);
     
     glDeleteShader(vsh);
     glDeleteShader(psh);
 }
+
+extern QWORD midisize;
+
+#ifdef GLTEXT
+#include "ctrufont.h"
+
+GLuint texFont;
+
+#ifdef TEXTNPS
+struct histogram* hist;
+#endif
+#ifdef SHNPS
+
+GLint uniFontTime;
+GLint uniFontNPS;
+#endif
+GLint uniFontTex;
+
+GLuint fontsh;
+GLint attrFontColor;
+GLint attrFontVertex;
+GLint attrFontUV;
+
+
+ULONGLONG drawnotesraw = 0;
+ULONGLONG drawnotes = 0;
+
+void CompileFontShader()
+{
+    GLuint vsh = glCreateShader(GL_VERTEX_SHADER);
+    GLuint psh = glCreateShader(GL_FRAGMENT_SHADER);
+    
+    
+    const char* shadera =
+        "#version 330 core\n"
+    #ifdef SHNPS
+        "uniform float intime;\n"
+        "uniform float innps;\n"
+    #endif
+        "in vec4 incolor;\n"
+        "in vec2 inpos;\n"
+        "in vec2 inuv;\n"
+        "out vec4 pcolor;\n"
+        "out vec2 puv;\n"
+        "void main()\n"
+        "{\n"
+        "   vec2 rawpos = vec2(inpos.x, inpos.y * 16.0F / 9.0F);\n"
+        "   pcolor = incolor;\n"
+        "   puv = inuv * (1.0F / 128.0F);\n"
+        "   vec2 pos = vec2((rawpos.x * (1.0F / 128.0F)), rawpos.y * (1.0F / 128.0F));\n"
+        #ifdef SHNPS
+        "   float shfactor = min((1.0F / 64.0F), pow(max(0.0F, innps - 4096.0F), 0.5F) * (1.0F / 32768.0F));\n"
+        "   vec2 vtxpos = vec2(pos.x + (sin((rawpos.y * 3.0F + (rawpos.x * 17.0F) + (intime * 0.125F * innps))) * shfactor),\n"
+        "                      pos.y + (cos((rawpos.x * 7.0F                      + (intime * innps))) * shfactor));\n"
+        #else
+        "   vec2 vtxpos = pos;\n"
+        #endif
+        #if defined(KEYBOARD) && !defined(ROTAT)
+        "   vtxpos.y = (vtxpos.y * 0.8F) + 0.2F;\n"
+        #endif
+        "   gl_Position = vec4(vtxpos.xy, 0.0F, 1.0F);\n"
+        "}\n"
+        ;
+
+    const char* shaderb =
+        "#version 330 core\n"
+        "uniform sampler2D fonTex;"
+        "in vec4 pcolor;\n"
+        "in vec2 puv;\n"
+        "out vec4 outcolor;\n"
+        "void main()\n"
+        "{\n"
+        "   outcolor = texture2D(fonTex, puv) * pcolor;\n"
+        "}\n"
+        ;
+    
+    GLint stat = 0;
+    
+    glShaderSource(vsh, 1, &shadera, 0);
+    glCompileShader(vsh);
+    glGetShaderiv(vsh, GL_COMPILE_STATUS, &stat);
+    //if(stat != 1)
+        PrintShaderInfo(vsh);
+    
+    glShaderSource(psh, 1, &shaderb, 0);
+    glCompileShader(psh);
+    glGetShaderiv(psh, GL_COMPILE_STATUS, &stat);
+    //if(stat != 1)
+        PrintShaderInfo(psh);
+    
+    fontsh = glCreateProgram();
+    
+    glAttachShader(fontsh, vsh);
+    glAttachShader(fontsh, psh);
+    
+    glLinkProgram(fontsh);
+    
+    glGetProgramiv(fontsh, GL_LINK_STATUS, &stat);
+    //if(stat != 1)
+    {
+        glGetProgramiv(fontsh, GL_INFO_LOG_LENGTH, &stat);
+        if(stat > 0)
+        {
+            char ilog[256];
+            GLsizei outloglen = 0;
+            glGetProgramInfoLog(fontsh, 256, &outloglen, ilog);
+            printf("%*.*s\n", outloglen, outloglen, ilog);
+        }
+        else
+        {
+            //puts("Unknown shader program error");
+        }
+        
+    }
+    
+    attrFontVertex = glGetAttribLocation(fontsh, "inpos");
+    attrFontColor = glGetAttribLocation(fontsh, "incolor");
+    attrFontUV = glGetAttribLocation(fontsh, "inuv");
+    
+    if(attrFontVertex < 0)
+        puts("inpos not found");
+    if(attrFontColor < 0)
+        puts("incolor not found");
+    if(attrFontUV < 0)
+        puts("inuv not found");
+    
+    while(attrVertex < 0 || attrColor < 0 || attrFontUV < 0)
+        ;
+    
+    #ifdef SHNPS
+    uniFontTime = glGetUniformLocation(fontsh, "intime");
+    uniFontNPS = glGetUniformLocation(fontsh, "innps");
+    #endif
+    uniFontTex = glGetUniformLocation(fontsh, "fonTex");
+    
+    //glEnable(GL_TEXTURE_2D);
+    glGenTextures(1, &texFont);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texFont);
+    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    void* fonttex = ctru_unpack();
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 128, 128, 0, GL_BGRA, GL_UNSIGNED_BYTE, fonttex);
+    free(fonttex);
+    
+    glUseProgram(fontsh);
+    glUniform1i(uniFontTex, 0);
+    #ifdef SHNPS
+    if(uniFontTime >= 0)
+        glUniform1f(uniFontTime, 0);
+    if(uniFontNPS >= 0)
+        glUniform1f(uniFontNPS, 0);
+    #endif
+    glUseProgram(0);
+    
+    glBindTexture(GL_TEXTURE_2D, 0);
+    //glActiveTexture(0);
+    //glDisable(GL_TEXTURE_2D);
+    
+    glDetachShader(fontsh, psh);
+    glDetachShader(fontsh, vsh);
+    
+    glDeleteShader(vsh);
+    glDeleteShader(psh);
+    
+    #ifdef TEXTNPS
+    hist = malloc((DWORD)1e7 * 0x10);
+    ZeroMemory(hist, (DWORD)1e7 * 0x10);
+    midisize += (DWORD)1e7 * 0x10;
+    #endif
+}
+#endif
 
 void WINAPI DebugCB(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam)
 {
@@ -287,9 +711,9 @@ void WINAPI DebugCB(GLenum source, GLenum type, GLuint id, GLenum severity, GLsi
 typedef struct NoteNode
 {
     struct NoteNode* next;
+    DWORD uid;
     ULONGLONG start;
     ULONGLONG end;
-    DWORD uid;
 } NoteNode;
 
 static MMPlayer* ply;
@@ -304,18 +728,25 @@ static NoteNode* freelist_returnhead;
 static NoteNode* VisibleNoteList;
 static NoteNode* VisibleNoteListHead;
 
-static NoteNode** ActiveNoteList;
-static DWORD* colortable;
+static NoteNode* *ActiveNoteList;
+static KCOLOR*   colortable;
 
 static QWORD notealloccount;
+static QWORD currnotealloc;
 
 static struct quad* quads;
-static size_t vertexsize;
 static size_t vtxidx;
+static const size_t 
+#ifdef _M_IX86
+    vertexsize = 1 << 12;
+#else
+    //vertexsize = 1 << 18;
+    vertexsize = 1 << 12;
+#endif
 
 
 //seems to work properly
-static inline void NoteAppend(NoteNode* node)
+static inline void NoteAppend(NoteNode* __restrict node)
 {
     //printf("NoteAppend %08X %lli\n", node->uid, node->start);
     
@@ -336,19 +767,19 @@ static inline void NoteAppend(NoteNode* node)
     }
 }
 
-static inline NoteNode* NoteAlloc()
+static inline NoteNode* __restrict NoteAlloc()
 {
     if(notelist)
     {
         //pop from list
         
-        NoteNode* ret = notelist; //pop last
+        NoteNode* __restrict ret = notelist; //pop last
         notelist = ret->next; //set list tail to next
         //ret->next = 0; //no need to set next to 0 because it'll be inserted into a list anyways which'll set this value
         return ret;
     }
     
-    NoteNode* rn = (NoteNode*)malloc(sizeof(NoteNode));
+    NoteNode* __restrict rn = (NoteNode*)malloc(sizeof(NoteNode));
     
     if(rn)
         notealloccount++;
@@ -358,7 +789,7 @@ static inline NoteNode* NoteAlloc()
     return rn;
 }
 
-static inline void NoteFree(NoteNode* node)
+static inline void NoteFree(NoteNode* __restrict node)
 {
     if(!freelist_head) //keep track of first element for O(1) return
     {
@@ -370,6 +801,77 @@ static inline void NoteFree(NoteNode* node)
     node->next = freelist;
     freelist = node;
 }
+
+#ifdef DYNASCROLL
+static QWORD syncvalue;
+
+static void NoteSync(MMPlayer* syncplayer, DWORD dwDelta)
+{
+    if(dwDelta)
+    {
+        DWORD dwValue = 60000000 / syncplayer->tempo;
+        while(dwDelta--)
+            syncvalue += dwValue;
+    }
+}
+#endif
+
+#ifdef TEXTNPS
+
+struct histogram
+{
+    ULONGLONG delta;
+    ULONGLONG count;
+} *hist = 0;
+DWORD histlast = 0;
+DWORD histwrite = 0;
+ULONGLONG histsum = 0;
+ULONGLONG histdelay = 0;
+ULONGLONG onehztimer = 0;
+ULONGLONG currnote = 0;
+ULONGLONG currnps = 0;
+
+int(WINAPI*kNPOriginal)(DWORD msg);
+static int WINAPI kNPIntercept(DWORD note)
+{
+    if(((BYTE)note & 0xF0) == 0x90 && (BYTE)(note >> 8))
+        currnote++;
+    
+    return kNPOriginal(note);
+}
+
+static void kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
+{
+    struct histogram* __restrict hhist = hist + (histwrite++);
+    if(histwrite == (DWORD)1e7)
+        histwrite = 0;
+    
+    hhist->delta = dwDelta * syncplayer->tempomulti;
+    hhist->count = currnote;
+    
+    currnps += currnote;
+    
+    struct histogram* __restrict ihist;
+    
+    while(onehztimer > (DWORD)1e7)
+    {
+        ihist = hist + (histlast++);
+        if(histlast == (DWORD)1e7)
+            histlast = 0;
+        
+        onehztimer -= ihist->delta;
+        currnps -= ihist->count;
+    }
+    
+    onehztimer += hhist->delta;
+    
+    currnote = 0;
+    
+    #ifdef DYNASCROLL
+    return NoteSync(syncplayer, dwDelta);
+    #endif
+}
+#endif
 
 static DWORD returnfailcount;
 
@@ -396,7 +898,7 @@ static void NoteReturn(MMPlayer* syncplayer, DWORD dwDelta)
         printf("Returnhead is null, yet freelist_return is %016llX\n", freelist_return);
     }
     
-    NoteNode* head = freelist_returnhead;
+    NoteNode* __restrict head = freelist_returnhead;
     freelist_returnhead = 0;
     NoteNode* f = freelist_return;
     freelist_return = 0;
@@ -407,25 +909,14 @@ static void NoteReturn(MMPlayer* syncplayer, DWORD dwDelta)
     notelist = f;
 }
 
-#ifdef DYNASCROLL
-static QWORD syncvalue;
-
-static void NoteSync(MMPlayer* syncplayer, DWORD dwDelta)
-{
-    if(dwDelta)
-    {
-        DWORD dwValue = 60000000 / syncplayer->tempo;
-        while(dwDelta--)
-            syncvalue += dwValue;
-    }
-}
-#endif
-
-static inline void FlushToilet()
+__attribute__((noinline)) static void FlushToilet()
 {
     if(vtxidx)
     {
-        glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(*quads),     0, GL_STREAM_DRAW);
+        //glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(*quads),     0, GL_STREAM_DRAW);
+        #ifdef GLTEXT
+        drawnotesraw += vtxidx;
+        #endif
         glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(*quads), quads, GL_STREAM_DRAW);
         glDrawElements(GL_TRIANGLES, vtxidx * NOTEVTX, GL_UNSIGNED_INT, 0);
         vtxidx = 0;
@@ -442,7 +933,7 @@ static int WINAPI dwLongMsg(DWORD note, LPCVOID ptr, DWORD len)
         return 1;
     }
     
-    BYTE buf[257];
+    BYTE buf[256];
     buf[0] = 0xF0;
     CopyMemory(buf + 1, ptr, len);
     
@@ -502,7 +993,7 @@ static int WINAPI dwEventCallback(DWORD note)
     
     ULONGLONG curr = TICKVAR;
     
-    NoteNode* node = ActiveNoteList[uid];
+    NoteNode* __restrict node = ActiveNoteList[uid];
     
     if((note & 0x10) && (note >> 16) & 0xFF)
     {
@@ -569,22 +1060,10 @@ static int WINAPI dwEventCallback(DWORD note)
     return 0;
 }
 
-#ifdef PIANOKEYS
-static inline int pianocode(BYTE num)
+#if 1
+static inline void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR color1)
 {
-    int div = num / 12;
-    int mod = num % 12;
-
-    if(mod > 4)
-        mod++;
-    
-    return ((div * 14) + mod);
-}
-#endif
-
-static inline void AddRawVtx(float offsy, float offst, float offsx, float offsr, DWORD color1)
-{
-     if(vtxidx == vertexsize)
+    if(__builtin_expect(vtxidx == vertexsize, 0))
     {
         FlushToilet();
         //vtxidx = 0;
@@ -592,14 +1071,14 @@ static inline void AddRawVtx(float offsy, float offst, float offsx, float offsr,
     
     //offsx -= 0.125F;
     
-    struct quad* ck = quads + (vtxidx++);
+    struct quad* __restrict ck = quads + (vtxidx++);
     
     #ifdef ROUNDEDGE
     //DWORD color = colortable[dwUID];
     //DWORD color1 = color; //(color & 0xFEFEFEFE) >> 1 | (1 << 31);
-    DWORD color = color1;
-    DWORD color2 = color1;
-    DWORD color3 = color;
+    KCOLOR color = color1;
+    KCOLOR color2 = color1;
+    KCOLOR color3 = color;
     
     float middx = offsx + ((offsr - offsx) * 0.75F);
     float middy = offsy + ((offst - offsy) * 0.75F);
@@ -636,11 +1115,160 @@ static inline void AddRawVtx(float offsy, float offst, float offsx, float offsr,
     
     #else
     
-    //DWORD color1 = colortable[dwUID];
+    //KCOLOR color1 = colortable[dwUID];
     
     #ifdef OUTLINE
     
-    DWORD color3 = ((color1 & 0xFCFCFCFC) >> 2) | (0xFF << 24);
+    #ifdef PFAKEY
+        #ifndef HDR
+        KCOLOR color2 = ((color1 & 0xFEFEFEFE) >> 1) | (0xFF << 24);
+        #else
+        KCOLOR color2 = (KCOLOR){
+            color1.r * 0.5F,
+            color1.g * 0.5F,
+            color1.b * 0.5F,
+            1.0F
+        };
+        #endif
+    #else
+        KCOLOR color2 = color1;
+    #endif
+    
+    #ifndef HDR
+    KCOLOR color3 = ((color1 & 0xFCFCFCFC) >> 2) | (0xFF << 24);
+    #else
+    KCOLOR color3 = (KCOLOR){
+        color1.r * 0.25F,
+        color1.g * 0.25F,
+        color1.b * 0.25F,
+        1.0F
+    };
+    #endif
+    
+    float origoffsy = offsy;
+    float origoffst = offst;
+    
+    offsy += minheight;
+    offst -= minheight;
+    if(offst < offsy)
+    {
+        ck->quads[0] = (struct quadpart){offsx, origoffst, color1};
+        ck->quads[1] = (struct quadpart){offsx, origoffsy, color1};
+        ck->quads[2] = (struct quadpart){offsr, origoffsy, color1};
+        ck->quads[3] = (struct quadpart){offsr, origoffst, color1};
+    }
+    else
+    {
+        ck->quads[0] = (struct quadpart){offsx, origoffst, color3};
+        ck->quads[1] = (struct quadpart){offsx, origoffsy, color3};
+        ck->quads[2] = (struct quadpart){offsr, origoffsy, color3};
+        ck->quads[3] = (struct quadpart){offsr, origoffst, color3};
+        
+        if(__builtin_expect(vtxidx == vertexsize, 0))
+        {
+            FlushToilet();
+            //vtxidx = 0;
+        }
+        
+        ck = quads + (vtxidx++);
+        
+        const float widthmagic =
+        #ifdef PIANOKEYS
+            150.0F * keymul / 1280.0F
+        #else
+            128.0F * keymul / 1280.0F
+        #endif
+        ;
+        offsx += widthmagic;
+        offsr -= widthmagic;
+        
+        ck->quads[0] = (struct quadpart){offsx, offst, color1};
+        ck->quads[1] = (struct quadpart){offsx, offsy, color1};
+        ck->quads[2] = (struct quadpart){offsr, offsy, color2};
+        ck->quads[3] = (struct quadpart){offsr, offst, color2};
+        
+    #else
+        ck->quads[0] = (struct quadpart){offsx, offst, color1};
+        ck->quads[1] = (struct quadpart){offsx, offsy, color1};
+        ck->quads[2] = (struct quadpart){offsr, offsy, color2};
+        ck->quads[3] = (struct quadpart){offsr, offst, color2};
+    #endif
+        
+    #ifdef OUTLINE
+    }
+    #endif
+    
+    #endif
+}
+#else
+static inline void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR color1)
+{
+     if(vtxidx == vertexsize)
+    {
+        FlushToilet();
+        //vtxidx = 0;
+    }
+    
+    //offsx -= 0.125F;
+    
+    struct quad* __restrict ck = quads + (vtxidx++);
+    
+    #ifdef ROUNDEDGE
+    //DWORD color = colortable[dwUID];
+    //DWORD color1 = color; //(color & 0xFEFEFEFE) >> 1 | (1 << 31);
+    KCOLOR color = color1;
+    KCOLOR color2 = color1;
+    KCOLOR color3 = color;
+    
+    float middx = offsx + ((offsr - offsx) * 0.75F);
+    float middy = offsy + ((offst - offsy) * 0.75F);
+    
+    /*
+        0 - 1 - 2
+        | /   \ |
+        3 - 8 - 4
+        | \   / |
+        5 - 6 - 7
+    */
+    
+    ck->quads[0] = (struct quadpart){offsx, offst, color1};
+    ck->quads[1] = (struct quadpart){middx, offst, color2};
+    ck->quads[2] = (struct quadpart){offsr, offst, color1};
+    
+    ck->quads[3] = (struct quadpart){offsx, middy, color1};
+    ck->quads[4] = (struct quadpart){offsr, middy, color1};
+    
+    ck->quads[5] = (struct quadpart){offsx, offsy, color1};
+    ck->quads[6] = (struct quadpart){middx, offsy, color2};
+    ck->quads[7] = (struct quadpart){offsr, offsy, color1};
+    
+    ck->quads[8] = (struct quadpart){middx, middy, color3};
+    
+    /*float fquad = offsy + ((offst - offsy) * 0.75F);
+    float lquad = offsy + ((offst - offsy) * 0.25F);
+    
+    ck->quads[8] = (struct quadpart){offsx, lquad, color1};
+    ck->quads[9] = (struct quadpart){offsx, fquad, color1};
+    
+    ck->quads[0xA] = (struct quadpart){offsr, lquad, color3};
+    ck->quads[0xB] = (struct quadpart){offsr, fquad, color3};*/
+    
+    #else
+    
+    //KCOLOR color1 = colortable[dwUID];
+    
+    #ifdef OUTLINE
+    
+    #ifndef HDR
+    KCOLOR color3 = ((color1 & 0xFCFCFCFC) >> 2) | (0xFF << 24);
+    #else
+    KCOLOR color3 = (KCOLOR){
+        color1.r * 0.25F,
+        color1.g * 0.25F,
+        color1.b * 0.25F,
+        1.0F
+    };
+    #endif
     
     ck->quads[0] = (struct quadpart){offsx, offst, color3};
     ck->quads[1] = (struct quadpart){offsx, offsy, color3};
@@ -654,20 +1282,36 @@ static inline void AddRawVtx(float offsy, float offst, float offsx, float offsr,
     offst -= minheight;
     if(offst < offsy)
     {
-        ck->quads[0] = (struct quadpart){0, 0, 0};
-        ck->quads[1] = (struct quadpart){0, 0, 0};
-        ck->quads[2] = (struct quadpart){0, 0, 0};
-        ck->quads[3] = (struct quadpart){0, 0, 0};
+        ck->quads[0] = (struct quadpart){0, 0};
+        ck->quads[1] = (struct quadpart){0, 0};
+        ck->quads[2] = (struct quadpart){0, 0};
+        ck->quads[3] = (struct quadpart){0, 0};
     }
     else
     {
-        offsx += 0.25F;
-        offsr -= 0.25F;
+        const float widthmagic =
+        #ifdef PIANOKEYS
+            150.0F * keymul / 1280.0F
+        #else
+            128.0F * keymul / 1280.0F
+        #endif
+        ;
+        offsx += widthmagic;
+        offsr -= widthmagic;
     #endif
         #ifdef PFAKEY
-            DWORD color2 = ((color1 & 0xFEFEFEFE) >> 1) | (0xFF << 24);
+            #ifndef HDR
+            KCOLOR color2 = ((color1 & 0xFEFEFEFE) >> 1) | (0xFF << 24);
+            #else
+            KCOLOR color2 = (KCOLOR){
+                color1.r * 0.5F,
+                color1.g * 0.5F,
+                color1.b * 0.5F,
+                1.0F
+            };
+            #endif
         #else
-            DWORD color2 = color1; //(color1 & 0xFEFEFEFE) >> 1;
+            KCOLOR color2 = color1;
         #endif
         
         ck->quads[0] = (struct quadpart){offsx, offst, color1};
@@ -681,13 +1325,36 @@ static inline void AddRawVtx(float offsy, float offst, float offsx, float offsr,
     
     #endif
 }
+#endif
+
+#ifdef PIANOKEYS
+static inline void pianokey(float* __restrict offsx, float* __restrict offsr, BYTE num)
+{
+    int div = num / 12;
+    int mod = num % 12;
+    
+    const BYTE keyoffssesses[] =
+    {
+        0, 4, 8, 14, 16, 24, 28, 32, 37, 40, 46, 48
+    };
+    num = keyoffssesses[mod];
+    
+    if(mod > 4)
+        mod++;
+    
+    DWORD rawoffs = (div * 7 * keymul) + num;
+    
+    *offsx = rawoffs;
+    *offsr = rawoffs + ((mod & 1) ? (keymul - (keymul >> 2)) : keymul);
+}
+#endif
 
 static inline void AddVtx(NoteNode localnode, ULONGLONG currtick, float tickscale)
 {
     #ifdef PIANOKEYS
-    DWORD rawoffs = pianocode(localnode.uid/* & 0xFF*/);
-    float offsx = rawoffs;
-    float offsr = rawoffs + 2;
+    float offsx;
+    float offsr;
+    pianokey(&offsx, &offsr, localnode.uid);
     #else
     DWORD rawoffs = localnode.uid & 0xFF;
     float offsx = rawoffs;
@@ -711,7 +1378,7 @@ static inline void AddVtx(NoteNode localnode, ULONGLONG currtick, float tickscal
 }
 
 #if defined(PFACOLOR)
-static __attribute__((noinline)) DWORD HSV2RGB(float hue, float saturation, float value)
+static __attribute__((noinline)) KCOLOR HSV2RGB(float hue, float saturation, float value)
 {
     float Irgb = saturation * value;
     float m = value - Irgb;
@@ -756,16 +1423,23 @@ static __attribute__((noinline)) DWORD HSV2RGB(float hue, float saturation, floa
             break;
     }
     
+    #ifndef HDR
     DWORD dwColor = 0;
     dwColor |= (BYTE)(((r + m) * 255.0F) + 0.5F) << 0;
     dwColor |= (BYTE)(((g + m) * 255.0F) + 0.5F) << 8;
     dwColor |= (BYTE)(((b + m) * 255.0F) + 0.5F) << 16;
     return dwColor;
+    #else
+    return (KCOLOR){ r + m, g + m, b + m, 1.0F };
+    #endif
 }
 #endif
 
 #ifdef O3COLOR
-const DWORD dominodark[] =
+#ifdef HDR
+#error HDR is not supported for Domino colors
+#endif
+const KCOLOR dominodark[] =
 {
     0x000078,
     0x004A78,
@@ -776,7 +1450,7 @@ const DWORD dominodark[] =
     0x740078
 };
 
-const DWORD dominolight[] =
+const KCOLOR dominolight[] =
 {
     0xBBBBFF,
     0x7FCDFF,
@@ -790,10 +1464,11 @@ const DWORD dominolight[] =
 
 #ifdef KEYBOARD
 
-static inline DWORD LerpColor(DWORD color, DWORD def, float a)
+static inline KCOLOR LerpColor(KCOLOR color, KCOLOR def, float a)
 {
     //printf("LerpColor %f\n", a);
     
+    #ifndef HDR
     float cr = (BYTE)color;
     float cg = (BYTE)(color >> 8);
     float cb = (BYTE)(color >> 16);
@@ -801,23 +1476,189 @@ static inline DWORD LerpColor(DWORD color, DWORD def, float a)
     float dr = (BYTE)def;
     float dg = (BYTE)(def >> 8);
     float db = (BYTE)(def >> 16);
+    #else
+    float cr = color.r;
+    float cg = color.g;
+    float cb = color.b;
+    
+    float dr = def.r;
+    float dg = def.g;
+    float db = def.b;
+    #endif
     
     cr += (dr - cr) * a;
     cg += (dg - cg) * a;
     cb += (db - cb) * a;
     
+    #ifndef HDR
     if(cr < 0) cr = 0; else if(cr > 255.49F) cr = 255.49F;
     if(cg < 0) cg = 0; else if(cg > 255.49F) cg = 255.49F;
     if(cb < 0) cb = 0; else if(cb > 255.49F) cb = 255.49F;
     
     return (BYTE)cr | ((DWORD)cg << 8) | ((DWORD)cb << 16) | (color & (0xFF << 24));
+    #else
+    return (KCOLOR){ cr, cg, cb, color.a };
+    #endif
 }
 
 #endif
 
+#ifdef GLTEXT
+#ifdef HDR
+#error HDR is not supported yet for texts
+#endif
+static void DrawFontString(int32_t x, int32_t y, int32_t scale, KCOLOR color, const char* text)
+{
+    DWORD startx = x;
+    
+    while(y < 72)
+    {
+        char c = *(text++);
+        if(!c)
+            break;
+        
+        if(c == '\r')
+        {
+            x = startx;
+            continue;
+        }
+        else if(c == '\n')
+        {
+            x = startx;
+            y += scale;
+            
+            continue;
+        }
+        
+        if(c != ' ')
+        {
+            float offsx = x;
+            float offsr = x + scale;
+            float offsy = y;
+            float offst = y + scale;
+            
+            DWORD ux =  (c       & 0xF) << 3;
+            DWORD uy = ((c >> 4) & 0xF) << 3;
+            
+            struct quad* ck = quads + (vtxidx++);
+            ck->quads[0] = (struct quadpart){offsx, offst, color, ux,     uy    };
+            ck->quads[1] = (struct quadpart){offsx, offsy, color, ux,     uy + 8};
+            ck->quads[2] = (struct quadpart){offsr, offsy, color, ux + 8, uy + 8};
+            ck->quads[3] = (struct quadpart){offsr, offst, color, ux + 8, uy    };
+        }
+        
+        x += scale;
+        
+        if(x >= 128)
+        {
+            x = startx;
+            y += scale;
+        }
+    }
+}
+
+static DWORD notetimer = 0;
+
+static void DrawFontOverlay()
+{
+    //glEnable(GL_TEXTURE_2D);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texFont);
+    glUseProgram(fontsh);
+    
+    glEnableVertexAttribArray(attrFontVertex);
+    glEnableVertexAttribArray(attrFontColor);
+    glEnableVertexAttribArray(attrFontUV);
+    
+    glVertexAttribPointer(attrFontVertex, 2, GL_FLOAT, GL_FALSE, 16, 0);
+    glVertexAttribPointer(attrFontColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16, (void*)8);
+    glVertexAttribPointer(attrFontUV, 2, GL_UNSIGNED_SHORT, GL_FALSE, 16, (void*)12);
+    
+    #ifdef SHNPS
+    glUniform1f(uniFontTime, (float)((double)(player->RealTime) / 1e7));
+    glUniform1f(uniFontNPS, (float)currnps);
+    #endif
+    
+    int textlen;
+    char buf[256];
+    
+    #ifdef TEXTNPS
+    textlen = sprintf(buf, "%llu N/s ", currnps);
+    DrawFontString(-textlen, 0, 2, -1, buf);
+    #endif
+    
+    textlen = sprintf(buf, " %llu quads", drawnotes);
+    DrawFontString(-textlen, -2, 2, -1, buf);
+    
+    if(notealloccount != currnotealloc)
+    {
+        currnotealloc = notealloccount;
+        
+        notetimer = (DWORD)2e7;
+    }
+    
+    if(notetimer)
+    {
+        DWORD dwColor;
+        
+        if(notetimer >= (1 << 24))
+            dwColor = -1;
+        else
+        {
+            dwColor = (notetimer >> 16);
+            dwColor |= dwColor << 8;
+            dwColor |= dwColor << 16;
+        }
+        
+        if(notetimer > (1 << 16))
+            notetimer -= (1 << 16);
+        else
+            notetimer = 0;
+        
+        DrawFontString(-18,  9, 2, dwColor, "__________________");
+        DrawFontString(-18, 10, 2, dwColor >> 1, "Memory allocation!");
+        
+        textlen = sprintf(buf, "%llu slots", currnotealloc);
+        DrawFontString(-textlen, 6, 2, dwColor, buf);
+        
+        textlen = sprintf(buf, "%.3fMB slots",
+                          (float)(currnotealloc * sizeof(NoteNode)) / (1024.0F * 1024.0F));
+        DrawFontString(-textlen, -10, 2, dwColor, buf);
+        
+        textlen = sprintf(buf, "%.3fMB total",
+                          (float)(midisize + (currnotealloc * sizeof(NoteNode))) / (1024.0F * 1024.0F));
+        DrawFontString(-textlen, -7, 2, dwColor >> 1, buf);
+    }
+    
+    
+    glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(*quads),     0, GL_STREAM_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(*quads), quads, GL_STREAM_DRAW);
+    glDrawElements(GL_TRIANGLES, vtxidx * NOTEVTX, GL_UNSIGNED_INT, 0);
+    
+    vtxidx = 0;
+    
+    glDisableVertexAttribArray(attrFontUV);
+    glDisableVertexAttribArray(attrFontColor);
+    glDisableVertexAttribArray(attrFontVertex);
+    
+    glUseProgram(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    //glActiveTexture(0);
+    //glDisable(GL_TEXTURE_2D);
+}
+#endif
+
+static BOOL isrender;
+
 DWORD WINAPI RenderThread(PVOID lpParameter)
 {
     puts("Hello from renderer");
+    
+    isrender = FALSE;
+
+#ifdef HDR
+    (void)NvOptimusEnablement;
+#endif
     
     notelist = 0;
     freelist = 0;
@@ -828,9 +1669,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     VisibleNoteList = 0;
     VisibleNoteListHead = 0;
     notealloccount = 0;
+    currnotealloc = 0;
     
     ply = *(MMPlayer**)lpParameter;
     player = ((MMPlayer**)lpParameter)[1];
+    
+    midisize += 2 * sizeof(MMPlayer);
     
     DWORD trackcount = 0;
     
@@ -847,6 +1691,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     colortable = malloc(trackcount * sizeof(*colortable));
     if(!colortable)
         puts("No colortable, fuck");
+    
+    midisize += sizeof(*colortable) * trackcount;
     
     do
     {
@@ -893,9 +1739,22 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #else
             float sat = ((seeds[1] % 40) + 60) / 100.0F;
         #endif
-            colortable[i++] = HSV2RGB((seeds[2] % 360) / 360.0F, sat, light) | (0xFF << 24);
+            colortable[i++] = HSV2RGB((seeds[2] % 360) / 360.0F, sat, light)
+            #ifndef HDR
+                | (0xFF << 24)
+            #endif
+            ;
     #else
+        #ifndef HDR
             colortable[i++] = col;
+        #else
+            colortable[i++] = (KCOLOR){
+                (BYTE)(col >> 0) * (1.0F / 255.0F),
+                (BYTE)(col >> 8) * (1.0F / 255.0F),
+                (BYTE)(col >> 16) * (1.0F / 255.0F),
+                1.0F
+            };
+        #endif
     #endif
     #endif
         }
@@ -913,6 +1772,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         puts("No ActiveNoteList, fuck");
     ZeroMemory(ActiveNoteList, sizeof(size_t) * trackcount);
     
+    midisize += trackcount * sizeof(size_t);
+    
     //UNUSED for now
     //trackcount >>= 12; // undo 16 * 256
     
@@ -927,11 +1788,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     CompileStandardShader();
     
-#ifdef _M_IX86
-    vertexsize = 1 << 12;;
-#else
-    vertexsize = 1 << 18;
-#endif
+    #ifdef GLTEXT
+    CompileFontShader();
+    #endif
+    
     quads = 0;
     GLuint* indexes = 0;
     
@@ -945,6 +1805,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             indexes = malloc(dest * sizeof(GLuint));
             if(indexes)
             {
+                midisize += vertexsize * sizeof(*quads) * 2;
+                midisize += sizeof(GLuint) * dest;
+                
                 size_t vidx = 0;
                 
                 for(size_t i = 0; i != dest;)
@@ -1038,9 +1901,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                     indexes[i++] = vidx + 2;
                     indexes[i++] = vidx + 0;
                     indexes[i++] = vidx + 1;
-                    indexes[i++] = vidx + 3;
                     indexes[i++] = vidx + 0;
                     indexes[i++] = vidx + 2;
+                    indexes[i++] = vidx + 3;
                 #endif
                     
                     vidx += QUADCOUNT;
@@ -1053,9 +1916,13 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 quads = 0;
             }
         }
-        vertexsize >>= 1;
-        if(!vertexsize)
+        
+        //vertexsize >>= 1;
+        //if(!vertexsize)
+        {
+            puts("Can't allocate vertex index memory!");
             break;
+        }
     }
     
     if(!quads)
@@ -1064,9 +1931,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         goto ded;
     }
     
+    GLuint g_vao = 0;
+    
     if(glGenVertexArrays && glBindVertexArray)
     {
-        GLuint g_vao;
         glGenVertexArrays(1, &g_vao);
         glBindVertexArray(g_vao);
     }
@@ -1120,7 +1988,11 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     player->SleepTimeMax = 0;
     player->SleepTicks = 1;
     player->KLongMsg = dwLongMsg;
-    #ifdef DYNASCROLL
+    #if defined(TEXTNPS)
+    kNPOriginal = player->KShortMsg;
+    player->KShortMsg = kNPIntercept;
+    player->KSyncFunc = kNPSync;
+    #elif defined(DYNASCROLL)
     player->KSyncFunc = NoteSync;
     
     syncvalue = 0;
@@ -1143,9 +2015,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     #endif
     
     CreateThread(0, 0x4000, PlayerThread,    ply, 0, 0);
-    CreateThread(0, 0x4000, PlayerThread, player, 0, 0);
-    
-    QWORD currnotealloc = 0;
+    //CreateThread(0, 0x4000, PlayerThread, player, 0, 0);
     
     int(WINAPI*NtQuerySystemTime)(QWORD* timeptr) = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtQuerySystemTime");
     
@@ -1155,7 +2025,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     DWORD timeout = 0;
     
-    #if defined(ROUNDEDGE) || defined(TRIPPY)
+    #if defined(ROUNDEDGE) //|| defined(TRIPPY) //|| defined(GLOWEDGE)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     #endif
@@ -1163,6 +2033,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     #ifdef TRANSFORM
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
+    #else
+    //glEnable(GL_DEPTH_TEST);
+    //glDepthFunc(GL_LEQUAL);
     #endif
     
     //glEnable(GL_CULL_FACE);
@@ -1174,14 +2047,29 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     NoteNode KeyNotes[256];
     ZeroMemory(KeyNotes, sizeof(KeyNotes));
+    
+    midisize += sizeof(KeyNotes);
     #endif
     
     while(!(WaitForSingleObject(vsyncevent, timeout) >> 9))
     {
+        if(canrender && !isrender)
+        {
+            CreateThread(0, 0x4000, PlayerThread, player, 0, 0);
+            
+            isrender = TRUE;
+        }
+        
         ResetEvent(vsyncevent);
         
+        
         glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
+        //glClearDepth(1.0);
+        //glClearColor(0.5859375F, 0.5859375F, 0.5859375F, 0.0F);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        
+        if(glBindVertexArray)
+            glBindVertexArray(g_vao);
         
         glBindBuffer(GL_ARRAY_BUFFER, g_vbo);
         glBufferData(GL_ARRAY_BUFFER, datasize, 0, GL_STREAM_DRAW);
@@ -1189,14 +2077,26 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         glEnableVertexAttribArray(attrVertex);
         glEnableVertexAttribArray(attrColor);
         
-        glVertexAttribPointer(attrVertex, 2, GL_FLOAT, GL_FALSE, 16, 0);
-        glVertexAttribPointer(attrColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16, (void*)8);
+        glVertexAttribPointer(attrVertex, 2, GL_FLOAT, GL_FALSE, sizeof(struct quadpart), 0);
+        #ifndef HDR
+        glVertexAttribPointer(attrColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(struct quadpart), (void*)8);
+        #else
+        glVertexAttribPointer(attrColor, 4, GL_FLOAT, GL_FALSE, sizeof(struct quadpart), (void*)8);
+        #endif
         
         glUseProgram(sh);
+        if(glBindVertexArray)
+            glBindVertexArray(g_vao);
         glBindBuffer(GL_ARRAY_BUFFER, g_vbo);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_ebo);
         
-        ULONGLONG notesdrawn = 0;
+        #if defined(HDR) && defined(TRIPPY)
+        glUniform1f(attrNotemix, 1);
+        #endif
+        
+        #ifdef GLTEXT
+        drawnotesraw = 0;
+        #endif
         
         #ifdef DYNASCROLL
         ULONGLONG notesync = mmnotesync;
@@ -1205,7 +2105,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         ULONGLONG notesync = TICKVAR;
         ULONGLONG currtick = TICKVAL;
         DWORD tickheight = (2500000
-        #ifdef TRANSFORM
+        #if defined(TRANSFORM) || defined(ROTAT)
         * 4
         #endif
         ) / player->tempomulti;
@@ -1214,6 +2114,14 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         #ifdef KEYBOARD
         currtimer = player->RealTime;
+        #endif
+        
+        #ifdef SHTIME
+        #ifdef DYNASCROLL
+        glUniform1f(uniTime, (float)(currtick / (double)tickheight * 0.25));
+        #else
+        glUniform1f(uniTime, (float)((double)(player->RealTime) / 1e7));
+        #endif
         #endif
         
         ULONGLONG midtick = currtick + tickheight;
@@ -1230,6 +2138,32 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         }*/
         // ===[BAD IDEA NEVER UNCOMMENT THIS]===
         
+        /*#ifdef HDR
+        #ifdef TRIPPY
+        const float uc = 0.0F;
+        const float kc = -1.5F;
+        #else
+        const float uc = 0.0F;
+        const float kc = -1.0F;
+        #endif
+        #ifdef ROTAT
+        AddRawVtx(kc, 1,   0, 150, (KCOLOR){uc, uc, uc, 1});
+        AddRawVtx(kc, 1, 150, 300, (KCOLOR){uc, uc, uc, 1});
+        AddRawVtx(kc, 1, 300, 450, (KCOLOR){uc, uc, uc, 1});
+        AddRawVtx(kc, 1, 450, 600, (KCOLOR){uc, uc, uc, 1});
+        #else
+        AddRawVtx(kc, 1, 0, 600, (KCOLOR){uc, uc, uc, 1});
+        #endif
+        #endif
+        */
+        
+        #if defined(HDR) && defined(TRIPPY)
+        if(vtxidx)
+            FlushToilet();
+        
+        glUniform1f(attrNotemix, 1);
+        #endif
+        
         NoteNode* prevnote = 0;
         NoteNode* currnote = VisibleNoteList;
         
@@ -1243,6 +2177,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             {
                 lmn->uid = currnote->uid;
                 lmn->start = 14000000;
+                //lmn->start = 21000000;
             }
             else if(lmn->start < 10000000)
                 lmn->start = 10000000;
@@ -1255,8 +2190,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 currnote = localnode.next;
                 
                 AddVtx(localnode, currtick, tickscale);
-                
-                notesdrawn++;
             }
             else
             {
@@ -1304,8 +2237,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             currnote = localnode.next;
             
             AddVtx(localnode, currtick, tickscale);
-            
-            notesdrawn++;
         }
         
         if(!freelist_return)
@@ -1315,6 +2246,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             freelist_return = freelist;
             freelist = 0;
         }
+        
+        if(vtxidx)
+            FlushToilet();
         
         /*if(TICKVAR < toptick)
         do
@@ -1336,12 +2270,24 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         }
         while(0);*/
         
+        #ifdef GLTEXT
+        drawnotes = drawnotesraw + vtxidx;
+        #endif
+        
         #ifdef KEYBOARD
+        
+        #if defined(HDR) && defined(TRIPPY)
+        glUniform1f(attrNotemix, 0);
+        //glUniform1f(attrNotemix, 1.0F / 64.0F);
+        #endif
+        
         
         ULONGLONG delta = 40000000;
         
         if((currtimer - lasttimer) < 2500000) // 250ms
-            delta = (currtimer - lasttimer) * 8;
+            //delta = (currtimer - lasttimer) * 8;
+            delta = (currtimer - lasttimer) * 6;
+            //delta = (currtimer - lasttimer) * 3;
         
         #ifdef PIANOKEYS
         BOOL blackflag = FALSE;
@@ -1351,31 +2297,99 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #define posflag i
         #endif
         
+        #ifdef HDR
+        float shalpha[256];
+        KCOLOR shcolor[256];
+        #endif
         
         #ifdef WIDEMIDI
         for(int i = 0; i < 256;)
         #else
         for(int i = 0; i < 128;)
+        //for(int i = 0; i < 256;)
         #endif
         {
             NoteNode* lmn = &KeyNotes[i];
-            DWORD dwColor =
+            KCOLOR dwColor =
                 #ifdef PIANOKEYS
                     blackflag
                 #else
                     1
                 #endif
+                #ifdef GLOW
+                #ifndef HDR
                 ? 0xFF111111 : 0xFF808080;
+                #else
+                    #ifndef TRIPPY
+                    ? (KCOLOR){ 0.04296875F, 0.04296875F, 0.04296875F, 1.0F }
+                    : (KCOLOR){ 0.25F, 0.25F, 0.25F, 1.0F };
+                    #else
+                    ? (KCOLOR){ 0.06640625F, 0.06640625F, 0.06640625F, 1.0F }
+                    : (KCOLOR){ 0.5F, 0.5F, 0.5F, 1.0F };
+                    #endif
+                #endif
+                #else
+                #ifdef HDR
+                #error HDR is not supported if glow is turned off
+                #endif
+                ? 0xFF202020 : 0xFFFFFFFF;
+                #endif
             
             if(lmn->start)
             {
-                dwColor = LerpColor(dwColor, ((colortable[lmn->uid >> 8] & 0xFEFEFEFE) >> 1) | (0xFF << 24), (float)lmn->start * 0.0000001F);
+                float coloralpha = (float)lmn->start * 0.0000001F;
+                
+                #ifdef GLOW
+                if(!(
+                #ifdef PIANOKEYS
+                    blackflag
+                #else
+                    1
+                #endif
+                ))
+                {
+                    float grayalpha = coloralpha < 1.0F ? coloralpha : 1.0F;
+                    #ifndef HDR
+                    dwColor = LerpColor(dwColor, 0xFFFFFFFF, grayalpha);
+                    #else
+                    dwColor = LerpColor(dwColor, (KCOLOR){ 1.0F, 1.0F, 1.0F, 1.0F }, grayalpha);
+                    #endif
+                }
+                #endif
+                
+                dwColor = LerpColor(dwColor, ((colortable[lmn->uid >> 8] )/*& 0xFEFEFEFE) >> 1*/), coloralpha)
+                #ifndef HDR
+                | (0xFF << 24)
+                #endif
+                ;
+                
+                #ifdef HDR
+                shalpha[i] = coloralpha;
+                shcolor[i] = dwColor;
+                #endif
                 
                 if(lmn->start > delta)
                     lmn->start -= delta;
                 else
+                {
+                    lmn->uid = 0;
                     lmn->start = 0;
+                }
             }
+            #ifdef HDR
+            else
+            {
+                shalpha[i] = 0;
+                shcolor[i] = (KCOLOR){0, 0, 0, 0};
+            }
+            #endif
+            
+            #ifdef PIANOKEYS
+            float offsx, offsr;
+            pianokey(&offsx, &offsr, i);
+            #endif
+            
+            #ifndef NOKEYBOARD
             
             //AddRawVtx(1.0F, !blackflag ? 1.15F : 1.25F, posflag, posflag + 2, colortable[KeyNotes[i].uid >> 8]);
             AddRawVtx(
@@ -1392,14 +2406,15 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             #else
                 -1.30F : -1.5F
             #endif
-                , -1.0F, posflag, posflag + 
+                , -1.0F,
             #ifdef PIANOKEYS
-                2
+                offsx, offsr
             #else
-                1
+                posflag, posflag + 1
             #endif
                 , dwColor);
-                
+            #endif
+            
             #ifdef PIANOKEYS
             
             if(!blackflag) // is white key
@@ -1444,6 +2459,16 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             #endif
         }
         
+        #ifdef HDR
+        #ifdef WIDEMIDI
+        glUniform1fv(uniLightAlpha, 256, shalpha);
+        glUniform4fv(uniLightColor, 256, (GLfloat*)shcolor);
+        #else
+        glUniform1fv(uniLightAlpha, 128, shalpha);
+        glUniform4fv(uniLightColor, 128, (GLfloat*)shcolor);
+        #endif
+        #endif
+        
         lasttimer = currtimer;
         
         #endif
@@ -1451,19 +2476,24 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         if(vtxidx)
             FlushToilet();
         //printf("Drawn: %10llu | Desync: %10lli\n", notesdrawn, player->RealTime - ply->RealTime);
-        notesdrawn = 0;
         //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         //glDrawArrays(GL_TRIANGLES, 0, 3);
-        //glDrawElements(GL_TRIANGLES, 6 * vtxidx, GL_UNSIGNED_INT, indexes);
+        //glDrawElements(GL_TRIANGLES, 6 * vtxidx, GL_UNSIGNED_INT, indexes);s
         
+        #ifndef GLTEXT
         if(notealloccount != currnotealloc)
         {
             currnotealloc = notealloccount;
             printf("Note allocation changed: %14llu\n", currnotealloc);
         }
+        #endif
         
         glDisableVertexAttribArray(attrVertex);
         glDisableVertexAttribArray(attrColor);
+        
+        #ifdef GLTEXT
+        DrawFontOverlay();
+        #endif
         
         glUseProgram(0);
         //glFlush();
@@ -1490,7 +2520,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         while(notelist)
         {
-            NoteNode* mn = notelist->next;
+            NoteNode* __restrict mn = notelist->next;
             free(notelist);
             notelist = mn;
         }
