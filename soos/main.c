@@ -37,7 +37,12 @@ HGLRC glctx;
 HANDLE vsyncevent;
 RECT erect;
 
+BOOL canrender;
+
 HMODULE KSModule;
+
+static MMPlayer* realplayer;
+static ULONGLONG realsync = 0;
 
 DWORD WINAPI RenderThread(PVOID lpParameter);
 
@@ -103,6 +108,8 @@ static HGLRC CreateGLContext(HWND wnd, HDC dc)
     pfd.iLayerType = PFD_MAIN_PLANE;
     
     int pixfmt = ChoosePixelFormat(wdc, &pfd);
+    int pixfmt2 = -1;
+    
     if(!pixfmt)
         puts("LWJGLException: Pixel format not accelerated");
     
@@ -133,23 +140,25 @@ static HGLRC CreateGLContext(HWND wnd, HDC dc)
             
             int params[] =
             {
-                WGL_ACCELERATION_ARB, WGL_FULL_ACCELERATION_EXT,
-                WGL_DRAW_TO_WINDOW_EXT, GL_TRUE,
-                WGL_RED_BITS_EXT, 8,
+                //WGL_ACCELERATION_ARB, WGL_FULL_ACCELERATION_EXT,
+                //WGL_DRAW_TO_WINDOW_EXT, GL_TRUE,
+                /*WGL_RED_BITS_EXT, 8,
                 WGL_GREEN_BITS_EXT, 8,
                 WGL_BLUE_BITS_EXT, 8,
-                WGL_ALPHA_BITS_EXT, 8,
-                WGL_DEPTH_BITS_EXT, 16,
+                WGL_ALPHA_BITS_EXT, 8,*/
+                WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_FLOAT_ARB,
+                //WGL_DEPTH_BITS_EXT, 16,
                 WGL_DOUBLE_BUFFER_EXT, GL_TRUE,
                 0, 0
             };
             UINT succ = 0;
-            int pixfmt2 = 0;
             if(wglChoosePixelFormat(wdc, params, 0, 1, &pixfmt2, &succ) && succ && pixfmt)
             {
                 printf("Found new pixel format, replacing %i with %i\n", pixfmt, pixfmt2);
                 
+                int origfmt = pixfmt;
                 pixfmt = pixfmt2;
+                pixfmt2 = origfmt;
                 
                 /*
                 int paramin[] =
@@ -192,7 +201,16 @@ static HGLRC CreateGLContext(HWND wnd, HDC dc)
     if(!DescribePixelFormat(dc, pixfmt, sizeof(pfd), &pfd))
     {
         printf("Failed to describe PixelFormat %i\n", pixfmt);
-        goto ctxfail;
+        
+        if(pixfmt2 != -1 && !DescribePixelFormat(dc, pixfmt2, sizeof(pfd), &pfd))
+        {
+            printf("Failed to describe fallback PixelFormat %i\n", pixfmt2);
+            goto ctxfail;
+        }
+        else
+        {
+            pixfmt = pixfmt2;
+        }
     }
     
     if(!SetPixelFormat(dc, pixfmt, &pfd))
@@ -208,8 +226,8 @@ static HGLRC CreateGLContext(HWND wnd, HDC dc)
         
         int attrs[] =
         {
-            WGL_CONTEXT_MAJOR_VERSION_ARB, 1,
-            WGL_CONTEXT_MINOR_VERSION_ARB, 1,
+            WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
+            WGL_CONTEXT_MINOR_VERSION_ARB, 3,
             0, 0
         };
         HGLRC ct = glCreateContextAttribsARB(dc, 0, attrs);
@@ -233,6 +251,16 @@ static HGLRC CreateGLContext(HWND wnd, HDC dc)
     return wglCreateContext(dc);
     
     ctxfail:
+    
+    do
+    {
+        char errbuf[256];
+        FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(),
+            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), errbuf, 255, NULL);
+        errbuf[255] = 0;
+        puts(errbuf);
+    }
+    while(0);
     
     wglMakeCurrent(wdc, 0);
     wglMakeCurrent(0, 0);
@@ -347,6 +375,18 @@ static LRESULT CALLBACK WindowProc(HWND wnd, UINT uMsg, WPARAM wParam, LPARAM lP
                     screen.dmPosition.x + screen.dmPelsWidth, screen.dmPosition.y + screen.dmPelsHeight,
                     SWP_FRAMECHANGED);
             }
+            else if(wParam == VK_SPACE && !(HIWORD(lParam) & KF_ALTDOWN))
+            {
+                if(!canrender)
+                    canrender = TRUE;
+                else if(realplayer->SyncPtr)
+                    realplayer->SyncPtr = 0;
+                else
+                {
+                    realsync = -realplayer->SyncOffset;
+                    realplayer->SyncPtr = (LONGLONG*)&realsync;
+                }
+            }
             
             break;
         }
@@ -401,6 +441,8 @@ static int dwNoMessage(DWORD dwParam1)
 }
 
 #endif
+
+QWORD midisize;
 
 static MMPlayer* CreatePlayer(LPCWCH testpath)
 {
@@ -470,6 +512,8 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
         return 0;
     }
     
+    midisize = fs.QuadPart;
+    
     BYTE* ptr = malloc(
     #ifndef _WIN64
     fs.LowPart
@@ -496,6 +540,8 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
     #endif
     )
     {
+        printf("Reading %llX...        \r", fs.QuadPart);
+        
         DWORD mustread = (fs.HighPart || (fs.LowPart >> 30)) ? 0x40000000 : fs.LowPart;
         if(!ReadFile(f, dstptr, mustread, &mustread, NULL))
         {
@@ -623,7 +669,7 @@ int main(int argc, char** argv)
     
     puts("MIDI Player OpenGL");
     puts(" build " DATETIME);
-    puts("Copyright (C) 2019 Sono");
+    puts("Copyright (C) 2019-2020 Sono");
     puts("All Rights Reserved.");
     puts("");
     
@@ -646,6 +692,9 @@ int main(int argc, char** argv)
     }
     
     if(!ks)
+        ks = LoadLibraryA("syndrv.dll");
+    
+    if(!ks)
     {
         puts("Loading OmniMIDI");
         ks = LoadLibraryA("OmniMIDI\\OmniMIDI.dll");
@@ -655,6 +704,25 @@ int main(int argc, char** argv)
     {
         puts("Can't load OmniMIDI");
         return 1;
+    }
+    
+    void(WINAPI*KDLayers)(DWORD) = (void*)GetProcAddress(ks, "syninit_SetLayersKDM");
+    if(KDLayers)
+    {
+        puts("Found layers function");
+        
+        FILE* f = fopen("layers.bin", "rb");
+        if(f)
+        {
+            puts("Reading layers");
+            
+            DWORD layers = 4;
+            fread(&layers, 1, 4, f);
+            fclose(f);
+            
+            printf("Layers for syndrv: %i\n", layers);
+            KDLayers(layers);
+        }
     }
     
     KSModule = ks;
@@ -751,6 +819,7 @@ int main(int argc, char** argv)
             return 1;
         }
         
+        
         player->KShortMsg = (void*)GetProcAddress(ks, "SendDirectData"
     #ifdef NOBUF
         "NoBuf"
@@ -779,7 +848,7 @@ int main(int argc, char** argv)
     wndclass.lpfnWndProc = WindowProc;
     wndclass.hInstance = GetModuleHandleA(0);
 #ifndef FULLSCREEN
-    wndclass.hCursor = LoadCursorA(0, IDC_CROSS);
+    //wndclass.hCursor = LoadCursorA(0, IDC_CROSS);
 #endif
     wndclass.hbrBackground = GetStockObject(BLACK_BRUSH);
     wndclass.lpszClassName = WClassName;
@@ -799,6 +868,10 @@ int main(int argc, char** argv)
         rekt.right = 1280;
         rekt.bottom = 720;
     }
+    
+    canrender = FALSE;
+    
+    realplayer = player;
     
     MMPlayer* wndparam[2];
     wndparam[0] = renderplayer;

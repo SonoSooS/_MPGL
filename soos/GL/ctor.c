@@ -1,5 +1,7 @@
-#include "core.h"
 #include <stdio.h>
+
+#include "core.h"
+#undef GLDEFINE
 
 DWORD (WINAPI*mGetModuleBaseNameA)
 (
@@ -60,63 +62,15 @@ int __attribute__((optimize("Os"))) GL_LinkFunctions()
 {
     int cnt = 0;
     
-#define GLINKFUNC(fn) { fn = (void*)GL_GetProcAddress(#fn); }
-    
-    //ZeroMemory(&glDummyFunc, (&glDummyFuncEnd - &glDummyFunc) * 8);
+#define GLDEFINE(proc, fn) { fn = (proc)GL_GetProcAddress(#fn); }
     
     glDummyFunc = 0;
     
-    GLINKFUNC(glCullFace)
-    GLINKFUNC(glClear)
-    GLINKFUNC(glClearColor)
-    GLINKFUNC(glDisable)
-    GLINKFUNC(glEnable)
-    GLINKFUNC(glFinish)
-    GLINKFUNC(glFlush)
-    GLINKFUNC(glBlendFunc)
-    GLINKFUNC(glDepthFunc)
-    GLINKFUNC(glGetString)
-    GLINKFUNC(glViewport)
-    GLINKFUNC(glDrawArrays)
-    GLINKFUNC(glDrawElements)
-    GLINKFUNC(glBlendFuncSeparate)
-    GLINKFUNC(glBlendColor)
-    GLINKFUNC(glBlendEquation)
-    GLINKFUNC(glBindBuffer)
-    GLINKFUNC(glDeleteBuffers)
-    GLINKFUNC(glGenBuffers)
-    GLINKFUNC(glBufferData)
-    GLINKFUNC(glBufferSubData)
-    GLINKFUNC(glBlendEquationSeparate)
-    GLINKFUNC(glDrawBuffers)
-    GLINKFUNC(glAttachShader)
-    GLINKFUNC(glCompileShader)
-    GLINKFUNC(glCreateProgram)
-    GLINKFUNC(glCreateShader)
-    GLINKFUNC(glDeleteProgram)
-    GLINKFUNC(glDeleteShader)
-    GLINKFUNC(glDetachShader)
-    GLINKFUNC(glDisableVertexAttribArray)
-    GLINKFUNC(glEnableVertexAttribArray)
-    GLINKFUNC(glGetAttribLocation)
-    GLINKFUNC(glGetProgramiv)
-    GLINKFUNC(glGetProgramInfoLog)
-    GLINKFUNC(glGetShaderiv)
-    GLINKFUNC(glGetShaderInfoLog)
-    GLINKFUNC(glLinkProgram)
-    GLINKFUNC(glShaderSource)
-    GLINKFUNC(glUseProgram)
-    GLINKFUNC(glVertexAttribPointer)
-    
-    GLINKFUNC(glBindVertexArray)
-    GLINKFUNC(glDeleteVertexArrays)
-    GLINKFUNC(glGenVertexArrays)
-    
-    GLINKFUNC(glDebugMessageCallbackARB)
+#include "core.h"
     
     glDummyFuncEnd = 0;
     
-#undef GLINKFUNC
+#undef GLDEFINE
     
     if(glGetString)
     {
@@ -129,8 +83,8 @@ int __attribute__((optimize("Os"))) GL_LinkFunctions()
 
 void(WINAPI*glDummyFunc)(void);
 
-#undef GLAPI
-#define GLAPI
+#define GLDEFINE(proc, name) proc name
 #include "core.h"
+#undef GLDEFINE
 
 void(WINAPI*glDummyFuncEnd)(void);

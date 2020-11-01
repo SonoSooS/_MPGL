@@ -2,11 +2,15 @@
 .SUFFIXES:
 #---------------------------------------------------------------------------------
 
+WOW64	?=
+export WOW64
+
 TOPDIR ?= $(CURDIR)
 
 PLPREFIX?=
 export PLPREFIX
 
+LD				:= $(PLPREFIX)gcc
 CC				:= $(PLPREFIX)gcc
 CXX				:= $(PLPREFIX)g++
 AS				:= $(PLPREFIX)as
@@ -31,7 +35,14 @@ INCLUDES		:= inc
 
 export DT := $(shell date +"%Y/%m/%d")
 
-ARCH	:=	
+ifeq ($(strip $(WOW64)),)
+#ARCH	:= -m64 -march=core2 -mtune=core2
+ARCH	:= -m64 -march=corei7 -mtune=corei7
+#ARCH	:= -m64 -march=core2 -mtune=corei7
+#ARCH	:= -m64 -march=k8 -mtune=k8
+else
+ARCH	:= -m32 -march=atom -mtune=atom
+endif
 
 CFLAGS	:=	-g -Wall -Ofast -ffast-math -ffunction-sections -fdata-sections \
 			$(ARCH) \

@@ -22,7 +22,7 @@
 //#define O3COLOR
 #define OUTLINE
 #define KEYBOARD
-//#define TRIPPY
+#define TRIPPY
 //#define WIDEMIDI
 //#define TIMI_TIEMR
 //#define ROTAT
@@ -34,7 +34,7 @@
 //#define GLTEXT
 //#define TEXTNPS
 //#define SHNPS
-//#define HDR
+#define HDR
 //#define NOKEYBOARD
 
 
@@ -735,14 +735,8 @@ static QWORD notealloccount;
 static QWORD currnotealloc;
 
 static struct quad* quads;
+static size_t vertexsize;
 static size_t vtxidx;
-static const size_t 
-#ifdef _M_IX86
-    vertexsize = 1 << 12;
-#else
-    //vertexsize = 1 << 18;
-    vertexsize = 1 << 12;
-#endif
 
 
 //seems to work properly
@@ -1792,6 +1786,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     CompileFontShader();
     #endif
     
+#ifdef _M_IX86
+    vertexsize = 1 << 12;
+#else
+    //vertexsize = 1 << 18;
+    vertexsize = 1 << 12;
+#endif
     quads = 0;
     GLuint* indexes = 0;
     
@@ -1916,13 +1916,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 quads = 0;
             }
         }
-        
-        //vertexsize >>= 1;
-        //if(!vertexsize)
-        {
-            puts("Can't allocate vertex index memory!");
+        vertexsize >>= 1;
+        if(!vertexsize)
             break;
-        }
     }
     
     if(!quads)

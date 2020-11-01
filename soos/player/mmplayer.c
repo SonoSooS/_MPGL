@@ -122,7 +122,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                     msg.prm1 = *(ptrs++);
                     msg.prm2 = *(ptrs++);
                     
-                    if(msg.prm2 != 1 || player->SyncPtr)
+                    if((msg.prm2 != 1 && msg.prm1 < 0x80) || player->SyncPtr)
                         KShortMsg(*(DWORD*)&msg);
                     
                     goto cmdend;
