@@ -286,7 +286,12 @@ static void CompileStandardShader()
         "}\n"
         ;
 
+    #ifndef HDR
     const char* shaderb =
+    #else
+    const char* shaderb[] =
+    {
+    #endif
         "#version 330 core\n"
     #ifndef PFAKEY
         "flat "
@@ -444,8 +449,8 @@ static void CompileStandardShader()
             "   outcolor = vec4(mix(outcolor.xyz, lightcolor.xyz, clamp((0.09F - dot(corrpos, corrpos)) * 32.0F, 0.0F, 1.0F)), outcolor.w);\n"
             #endif
         #endif
-        //"   outcolor = vec4(pow(outcolor.xyz / (outcolor.xyz + vec3(1.0F)), vec3(1.1F)), outcolor.w);\n"
-        //"   outcolor = vec4(pow(outcolor.xyz, vec3(0.5F)), outcolor.w);\n"
+        ,
+        "",
     #else
         "   outcolor = vec4(pcolor.xyz"
         #ifdef TRANSFORM
@@ -454,7 +459,10 @@ static void CompileStandardShader()
         ", pcolor.w);\n"
     #endif
         "}\n"
-        ;
+    #ifdef HDR
+    }
+    #endif
+    ;
     GLint stat = 0;
     
     glShaderSource(vsh, 1, &shadera, 0);
@@ -463,7 +471,18 @@ static void CompileStandardShader()
     //if(stat != 1)
         PrintShaderInfo(vsh);
     
+    #ifdef HDR
+    if(!uglSupportsExt("WGL_EXT_framebuffer_sRGB"))
+    {
+        shaderb[1] =
+        //"   outcolor = vec4(pow(outcolor.xyz / (outcolor.xyz + vec3(1.0F)), vec3(1.1F)), outcolor.w);\n"
+        "   outcolor = vec4(pow(outcolor.xyz, vec3(0.5F)), outcolor.w);\n"
+        ;
+    }
+    glShaderSource(psh, 3, shaderb, 0);
+    #else
     glShaderSource(psh, 1, &shaderb, 0);
+    #endif
     glCompileShader(psh);
     glGetShaderiv(psh, GL_COMPILE_STATUS, &stat);
     //if(stat != 1)
@@ -735,8 +754,14 @@ static QWORD notealloccount;
 static QWORD currnotealloc;
 
 static struct quad* quads;
-static size_t vertexsize;
 static size_t vtxidx;
+static const size_t 
+#ifdef _M_IX86
+    vertexsize = 1 << 12;
+#else
+    //vertexsize = 1 << 18;
+    vertexsize = 1 << 12;
+#endif
 
 
 //seems to work properly
@@ -1786,12 +1811,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     CompileFontShader();
     #endif
     
-#ifdef _M_IX86
-    vertexsize = 1 << 12;
-#else
-    //vertexsize = 1 << 18;
-    vertexsize = 1 << 12;
-#endif
     quads = 0;
     GLuint* indexes = 0;
     
@@ -1916,9 +1935,13 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 quads = 0;
             }
         }
-        vertexsize >>= 1;
-        if(!vertexsize)
+        
+        //vertexsize >>= 1;
+        //if(!vertexsize)
+        {
+            puts("Can't allocate vertex index memory!");
             break;
+        }
     }
     
     if(!quads)
@@ -2361,7 +2384,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 
                 #ifdef HDR
                 shalpha[i] = coloralpha;
-                shcolor[i] = dwColor;
+                //shcolor[i] = dwColor;
+                shcolor[i] = colortable[lmn->uid >> 8];
                 #endif
                 
                 if(lmn->start > delta)
@@ -2506,6 +2530,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             timeout = 30;
         prevtime = currtime;
         
+        #ifndef KEYBOARD
         if(player->tracks->ptrs)
             continue;
         
@@ -2522,6 +2547,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         }
         
         break;
+        #endif
     }
     
     ded:
