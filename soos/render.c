@@ -13,20 +13,20 @@
 
 
 #define TRACKID
-#define PFACOLOR
-#define PFAKEY
+//#define PFACOLOR
+//#define PFAKEY
 //#define ROUNDEDGE
 //#define TRANSFORM
-#define PIANOKEYS
+//#define PIANOKEYS
 //#define DYNASCROLL
-//#define O3COLOR
-#define OUTLINE
-#define KEYBOARD
-#define TRIPPY
+#define O3COLOR
+//#define OUTLINE
+//#define KEYBOARD
+//#define TRIPPY
 //#define WIDEMIDI
 //#define TIMI_TIEMR
 //#define ROTAT
-#define GLOW
+//#define GLOW
 //#define SHTIME
 //#define WOBBLE
 //#define WOBBLE_INTERP
@@ -34,7 +34,7 @@
 //#define GLTEXT
 //#define TEXTNPS
 //#define SHNPS
-#define HDR
+//#define HDR
 //#define NOKEYBOARD
 
 
@@ -829,8 +829,8 @@ static void NoteSync(MMPlayer* syncplayer, DWORD dwDelta)
     if(dwDelta)
     {
         DWORD dwValue = 60000000 / syncplayer->tempo;
-        while(dwDelta--)
-            syncvalue += dwValue;
+        //while(dwDelta--)
+            syncvalue += (ULONGLONG)dwValue * (ULONGLONG)dwDelta;
     }
 }
 #endif
@@ -1209,8 +1209,8 @@ static inline void AddRawVtx(float offsy, float offst, float offsx, float offsr,
     #else
         ck->quads[0] = (struct quadpart){offsx, offst, color1};
         ck->quads[1] = (struct quadpart){offsx, offsy, color1};
-        ck->quads[2] = (struct quadpart){offsr, offsy, color2};
-        ck->quads[3] = (struct quadpart){offsr, offst, color2};
+        ck->quads[2] = (struct quadpart){offsr, offsy, color1/*color2*/};
+        ck->quads[3] = (struct quadpart){offsr, offst, color1/*color2*/};
     #endif
         
     #ifdef OUTLINE
