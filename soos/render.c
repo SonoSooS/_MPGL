@@ -13,20 +13,20 @@
 
 
 #define TRACKID
-//#define PFACOLOR
-//#define PFAKEY
+#define PFACOLOR
+#define PFAKEY
 //#define ROUNDEDGE
 //#define TRANSFORM
-//#define PIANOKEYS
+#define PIANOKEYS
 //#define DYNASCROLL
-#define O3COLOR
-//#define OUTLINE
-//#define KEYBOARD
+//#define O3COLOR
+#define OUTLINE
+#define KEYBOARD
 //#define TRIPPY
 //#define WIDEMIDI
 //#define TIMI_TIEMR
 //#define ROTAT
-//#define GLOW
+#define GLOW
 //#define SHTIME
 //#define WOBBLE
 //#define WOBBLE_INTERP
@@ -36,12 +36,22 @@
 //#define SHNPS
 //#define HDR
 //#define NOKEYBOARD
+#define TIMI_CAPTURE
+#define TIMI_IMPRECISE
+//#define FASTHDR
 
 
 #ifdef PIANOKEYS
 const DWORD keymul = 8;
 #else
 const DWORD keymul = 1;
+#endif
+
+#ifdef TIMI_CAPTURE
+const ULONGLONG FPS_NOMIN = 1;
+const ULONGLONG FPS_DENIM = 60;
+ULONGLONG FPS_frame = 0;
+volatile BOOL FPS_capture = FALSE;
 #endif
 
 
@@ -54,7 +64,7 @@ const float minheight = (1.0F / 256.0F)
 #endif
 ;
 
-#ifdef HDR
+#if defined(HDR) && !defined(FASTHDR)
 __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 #endif
 
@@ -393,6 +403,9 @@ static void CompileStandardShader()
     #elif defined(HDR)
         "   outcolor = pcolor;//blur(blurtex, gl_FragCoord.xy * texres) + pcolor;\n"
         "   vec4 lightcolor = vec4(0.0F, 0.0F, 0.0F, 1.0F);\n"
+        #ifdef FASTHDR
+        "   if(notemix == 0.0F){\n"
+        #endif
         #ifdef WIDEMIDI
         "   for(int i = 0; i < 256; i++)\n"
         #else
@@ -417,6 +430,9 @@ static void CompileStandardShader()
         "       lightcolor += vec4((lightc[i].xyz * pow(lighta[i], 1.0F)) * min(pow((0.5F / posdist), 1.0F) * (1.0F / 4096.0F), 4.0F), 0.0F);\n"
         #endif
         "   }\n"
+        #ifdef FASTHDR
+        "   }\n"
+        #endif
         #if defined(TRIPPY)
         "   float notea = 1.0F - notemix;\n"
         //"   float sosi = dot(lightcolor.xyz, pcolor.www) * 8.0F;\n"
@@ -472,7 +488,9 @@ static void CompileStandardShader()
         PrintShaderInfo(vsh);
     
     #ifdef HDR
+    #ifndef TIMI_CAPTURE
     if(!uglSupportsExt("WGL_EXT_framebuffer_sRGB"))
+    #endif
     {
         shaderb[1] =
         //"   outcolor = vec4(pow(outcolor.xyz / (outcolor.xyz + vec3(1.0F)), vec3(1.1F)), outcolor.w);\n"
@@ -980,6 +998,71 @@ static int timiTimerFunc(PULONGLONG timeout)
 }
 #endif
 
+#ifdef TIMI_CAPTURE
+static int WINAPI FPS_ShortMsg(DWORD note)
+{
+    return 0;
+}
+
+#ifdef TIMI_IMPRECISE
+#define NEXTFRAME ((10000000ULL / FPS_DENIM) * FPS_frame * FPS_NOMIN)
+#else
+#define NEXTFRAME ((10000000ULL * FPS_frame * FPS_NOMIN) / FPS_DENIM)
+#endif
+
+
+static void FPS_SyncFunc(MMPlayer* syncplayer, DWORD dwDelta)
+{
+    ULONGLONG nextframe = NEXTFRAME;
+    if(nextframe <= player->RealTime)
+    {
+        int(WINAPI*NtDelayExecution)(BOOL doalert, INT64* timeptr)
+                = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtDelayExecution");
+        
+        while(!ply->done && (INT64)(ply->RealTime - (player->RealTime + ply->SyncOffset)) < 0)
+        {
+            INT64 sleep = -1;
+            NtDelayExecution(TRUE, &sleep);
+        }
+        
+        FPS_capture = TRUE;
+        
+        do
+        {
+            INT64 sleep = -1;
+            NtDelayExecution(TRUE, &sleep);
+        }
+        while(FPS_capture);
+        
+        
+        FPS_frame++;
+        
+        for(;;)
+        {
+            nextframe = NEXTFRAME;
+            if(nextframe <= player->RealTime)
+            {
+                puts("Frame drop");
+                
+                FPS_capture = TRUE;
+                
+                do
+                {
+                    INT64 sleep = -1;
+                    NtDelayExecution(TRUE, &sleep);
+                }
+                while(FPS_capture);
+                
+                FPS_frame++;
+                
+            }
+            else
+                break;
+        }
+    }
+}
+#endif
+
 /*
     LongMessage callback for the player
     
@@ -1456,8 +1539,28 @@ static __attribute__((noinline)) KCOLOR HSV2RGB(float hue, float saturation, flo
 
 #ifdef O3COLOR
 #ifdef HDR
-#error HDR is not supported for Domino colors
-#endif
+const int dominodark[] =
+{
+    0xFFA5A5, //red
+    0xFFBD55, //orang
+    0xFFFF2D, //yellow
+    0x8DFF55, //green
+    0x55FFE2, //blue
+    0xD7AFFF, //lavander
+    0xFF91FB  //pink
+};
+
+const int dominolight[] =
+{
+    0xFFA5A5, //red
+    0xFFBD55, //orang
+    0xFFFF2D, //yellow
+    0x8DFF55, //green
+    0x55FFE2, //blue
+    0xD7AFFF, //lavander
+    0xFF91FB  //pink
+};
+#else
 const KCOLOR dominodark[] =
 {
     0x000078,
@@ -1479,6 +1582,7 @@ const KCOLOR dominolight[] =
     0xFFC3E1,
     0xFCACFF
 };
+#endif
 #endif
 
 #ifdef KEYBOARD
@@ -1674,8 +1778,36 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     puts("Hello from renderer");
     
     isrender = FALSE;
+    
+#ifdef TIMI_CAPTURE
+    HANDLE hpipe = CreateNamedPipeW
+    (
+        L"\\\\.\\pipe\\MPGL_readpixels",
+        PIPE_ACCESS_OUTBOUND,
+        PIPE_TYPE_BYTE,
+        1,
+        0,
+        0,
+        0,
+        NULL
+    );
+    
+    if(!hpipe || hpipe == INVALID_HANDLE_VALUE)
+    {
+        puts("Pipe error");
+        PostQuitMessage(1);
+        return GetLastError();
+    }
+    
+    erect.left = 0;
+    erect.top = 0;
+    erect.bottom = 1280;
+    erect.right = 720;
+    
+    void* capdata = malloc(1280 * 720 * 4);
+#endif
 
-#ifdef HDR
+#if defined(HDR) && !defined(FASTHDR)
     (void)NvOptimusEnablement;
 #endif
     
@@ -1747,9 +1879,26 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     #ifdef O3COLOR
         col = dominodark[(((i >> 4) + 6) % 7)] | (0xFF << 24);
+        
+        #ifdef HDR
+        col = (((col >>  0) & 0xFF) << 16)
+            | (((col >>  8) & 0xFF) <<  8)
+            | (((col >> 16) & 0xFF) <<  0)
+            | (0xFF << 24);
+        #endif
+        
         ic = 16;
         while(ic--)
+        #ifndef HDR
             colortable[i++] = col;
+        #else
+            colortable[i++] = (KCOLOR){
+                (BYTE)(col >> 0) * (1.0F / 255.0F),
+                (BYTE)(col >> 8) * (1.0F / 255.0F),
+                (BYTE)(col >> 16) * (1.0F / 255.0F),
+                1.0F
+            };
+        #endif
     #else
     #ifdef PFACOLOR
             float light = ((seeds[0] % 20) + 80) / 100.0F;
@@ -1801,7 +1950,11 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     glEnable(GL_DEBUG_OUTPUT);
     glDebugMessageCallbackARB(DebugCB, 0);
     
+    #ifndef TIMI_CAPTURE
     uglSwapControl(1);
+    #else
+    uglSwapControl(0);
+    #endif
     
     glViewport(0, 0, 1280, 720);
     
@@ -2033,6 +2186,20 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     while(0);
     #endif
     
+    #ifdef TIMI_CAPTURE
+    ULONGLONG timersync = ~0;
+    timersync = timersync >> 2;
+    
+    player->SyncPtr = (LONGLONG*)&timersync;
+    player->SyncOffset = 0;
+    
+    player->KShortMsg = FPS_ShortMsg;
+    player->KSyncFunc = FPS_SyncFunc;
+    
+    ply->SleepTicks = 1;
+    ply->SleepTimeMax = 0;
+    #endif
+    
     CreateThread(0, 0x4000, PlayerThread,    ply, 0, 0);
     //CreateThread(0, 0x4000, PlayerThread, player, 0, 0);
     
@@ -2077,6 +2244,15 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             CreateThread(0, 0x4000, PlayerThread, player, 0, 0);
             
             isrender = TRUE;
+            
+            #ifdef TIMI_CAPTURE
+            
+            player->SyncPtr = (LONGLONG*)&timersync;
+            player->SyncOffset = 0;
+            
+            player->KShortMsg = FPS_ShortMsg;
+            player->KSyncFunc = FPS_SyncFunc;
+            #endif
         }
         
         ResetEvent(vsyncevent);
@@ -2524,13 +2700,50 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         glViewport(erect.left, erect.top, erect.right - erect.left, erect.bottom - erect.top);
         
         NtQuerySystemTime(&currtime);
+        #ifndef TIMI_CAPTURE
         if((currtime - prevtime) >> 18)
             timeout = 0;
         else
             timeout = 30;
+        #endif
         prevtime = currtime;
         
-        #ifndef KEYBOARD
+        #ifdef TIMI_CAPTURE
+        if(FPS_capture)
+        {
+            FPS_capture = FALSE;
+            
+            glReadPixels(
+                0, 0, 1280, 720,
+                GL_BGRA, GL_UNSIGNED_BYTE,
+                capdata
+            );
+            
+            DWORD written;
+            while(!WriteFile(hpipe, capdata, 1280 * 720 * 4, &written, 0))
+            {
+                printf("Pipe error %08X\n", GetLastError());
+                switch(GetLastError())
+                {
+                    case ERROR_NO_DATA:
+                        puts("Pipe closed, dying");
+                        goto ded;
+                    
+                    case ERROR_PIPE_LISTENING:
+                    {
+                        if(WaitForSingleObject(vsyncevent, 1000) >> 9)
+                        {
+                            puts("Changed your mind, eh?");
+                            goto ded;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        #endif
+        
+        //#ifndef KEYBOARD
         if(player->tracks->ptrs)
             continue;
         
@@ -2547,10 +2760,15 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         }
         
         break;
-        #endif
+        //#endif
     }
     
     ded:
+    
+#ifdef TIMI_CAPTURE
+    CloseHandle(hpipe);
+    PostQuitMessage(1);
+#endif
     
     wglMakeCurrent(0, 0);
     
