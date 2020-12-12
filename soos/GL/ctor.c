@@ -83,7 +83,7 @@ int __attribute__((optimize("Os"))) GL_LinkFunctions()
 
 void(WINAPI*glDummyFunc)(void);
 
-#define GLDEFINE(proc, name) proc name
+#define GLDEFINE(proc, name) proc name ;
 #include "core.h"
 #undef GLDEFINE
 
