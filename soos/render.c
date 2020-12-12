@@ -13,32 +13,46 @@
 
 
 #define TRACKID
-#define PFACOLOR
-#define PFAKEY
+//#define PFACOLOR
+//#define PFAKEY
 //#define ROUNDEDGE
-//#define TRANSFORM
+#define TRANSFORM
 #define PIANOKEYS
 //#define DYNASCROLL
-//#define O3COLOR
-#define OUTLINE
+#define O3COLOR
+//#define OUTLINE
 #define KEYBOARD
 //#define TRIPPY
 //#define WIDEMIDI
 //#define TIMI_TIEMR
-//#define ROTAT
-#define GLOW
+#define ROTAT
+//#define GLOW
 //#define SHTIME
 //#define WOBBLE
 //#define WOBBLE_INTERP
 //#define GLOWEDGE
-//#define GLTEXT
-//#define TEXTNPS
-//#define SHNPS
+#define GLTEXT
+#define TEXTNPS
+#define SHNPS
+//#define SHWOBBLE
 //#define HDR
 //#define NOKEYBOARD
 #define TIMI_CAPTURE
-#define TIMI_IMPRECISE
+//#define TIMI_NOCAPTURE
+//#define TIMI_IMPRECISE
+#define TIMI_SILENT
+//#define TIMI_CUSTOMSCROLL
 //#define FASTHDR
+//#define TEXTALLOC
+#define TEXTNEAT
+#define TEXTTRANS
+#define GRACE
+#define DEBUGTEXT
+
+#define CUSTOMTICK 3840*4
+
+#define CAPW 1920
+#define CAPH 1080
 
 
 #ifdef PIANOKEYS
@@ -48,10 +62,14 @@ const DWORD keymul = 1;
 #endif
 
 #ifdef TIMI_CAPTURE
-const ULONGLONG FPS_NOMIN = 1;
-const ULONGLONG FPS_DENIM = 60;
+const ULONGLONG FPS_DENIM = 625*8;//28125;//3840;
+const ULONGLONG FPS_NOMIN = 100;//130;
 ULONGLONG FPS_frame = 0;
 volatile BOOL FPS_capture = FALSE;
+
+#ifdef TIMI_CUSTOMSCROLL
+ULONGLONG FPS_scroll = 0;
+#endif
 #endif
 
 
@@ -72,10 +90,6 @@ __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 typedef DWORD KCOLOR;
 #else
 typedef struct { float r, g, b, a; } KCOLOR;
-
-#if defined(GLTEXT) || defined(TEXTNPS)
-#error HDR is incompatible with some modules
-#endif
 #endif
 
 #if defined(ROUNDEDGE) && !defined(DYNASCROLL)
@@ -106,7 +120,11 @@ const DWORD minwidth = tickheight / 32;
 
 #else
 const DWORD minwidth = 16;
+#ifdef TIMI_CUSTOMSCROLL
+#define TICKVAL FPS_scroll
+#else
 #define TICKVAL player->TickCounter
+#endif
 #define TICKVAR ply->TickCounter
 #endif
 
@@ -148,7 +166,6 @@ struct quadpart
 {
     float x, y;
     GLuint color;
-    WORD u, v;
 };
 #else
 struct quadpart
@@ -248,9 +265,11 @@ static void CompileStandardShader()
         "   vec2 pos = vec2((rawpos.x * (2.0F / 128.0F)) - 1.0F, rawpos.y);\n"
     #endif
     #ifdef TRANSFORM
+        "   const float PI2 = 3.1415926535897932384626433832795 / 2.0;\n"
         "   float z = min((1.0F - pos.y) * 0.5F, 1.0F);\n"
         //"   vec2 vtxpos = vec2(pos.x * ((3.0F - pos.y) * 0.25F), (-z*z*2.0F) + 1.0F);\n"
-        "   vec2 vtxpos = vec2(pos.x * ((3.0F - max(pos.y, -1.0F)) * 0.25F), (-pos.y*pos.y*2.0F) + 1.0F);\n"
+        //"   vec2 vtxpos = vec2(pos.x * ((3.0F - max(pos.y, -1.0F)) * 0.25F), (-pos.y*pos.y*2.0F) + 1.0F);\n"
+        "   vec2 vtxpos = vec2(pos.x * ((3.0F - max(pos.y, -1.0F)) * 0.25F), ((cos(pos.y)-0.52F) * 4.0F) - 1.16F);\n"
         "   zbuf = z;\n"
     #else
         "   vec2 vtxpos = pos;\n"
@@ -296,7 +315,7 @@ static void CompileStandardShader()
         "}\n"
         ;
 
-    #ifndef HDR
+    #if !defined(HDR) || defined(GLOWEDGE) || defined(ROUNDEDGE)
     const char* shaderb =
     #else
     const char* shaderb[] =
@@ -446,6 +465,12 @@ static void CompileStandardShader()
                     " + vec3((1.0F / 64.0F))"
                     ") * vec3(notea)) + vec3(notemix))"
             ", outcolor.w);\n"
+            #ifdef TRANSFORM
+            "   if(notemix != 0.0F)\n"
+            "   {\n"
+            "       outcolor.xyz *= (0.0078125F + (zbuf*zbuf*zbuf));\n"
+            "   }\n" 
+            #endif
         
         /*
         "   outcolor = vec4("
@@ -475,7 +500,7 @@ static void CompileStandardShader()
         ", pcolor.w);\n"
     #endif
         "}\n"
-    #ifdef HDR
+    #if defined(HDR) && !defined(GLOWEDGE) && !defined(ROUNDEDGE)
     }
     #endif
     ;
@@ -487,7 +512,7 @@ static void CompileStandardShader()
     //if(stat != 1)
         PrintShaderInfo(vsh);
     
-    #ifdef HDR
+    #if defined(HDR) && !defined(GLOWEDGE) && !defined(ROUNDEDGE)
     #ifndef TIMI_CAPTURE
     if(!uglSupportsExt("WGL_EXT_framebuffer_sRGB"))
     #endif
@@ -495,6 +520,7 @@ static void CompileStandardShader()
         shaderb[1] =
         //"   outcolor = vec4(pow(outcolor.xyz / (outcolor.xyz + vec3(1.0F)), vec3(1.1F)), outcolor.w);\n"
         "   outcolor = vec4(pow(outcolor.xyz, vec3(0.5F)), outcolor.w);\n"
+        //"\n"
         ;
     }
     glShaderSource(psh, 3, shaderb, 0);
@@ -610,7 +636,7 @@ void CompileFontShader()
         "   pcolor = incolor;\n"
         "   puv = inuv * (1.0F / 128.0F);\n"
         "   vec2 pos = vec2((rawpos.x * (1.0F / 128.0F)), rawpos.y * (1.0F / 128.0F));\n"
-        #ifdef SHNPS
+        #if defined(SHNPS) && defined(SHWOBBLE)
         "   float shfactor = min((1.0F / 64.0F), pow(max(0.0F, innps - 4096.0F), 0.5F) * (1.0F / 32768.0F));\n"
         "   vec2 vtxpos = vec2(pos.x + (sin((rawpos.y * 3.0F + (rawpos.x * 17.0F) + (intime * 0.125F * innps))) * shfactor),\n"
         "                      pos.y + (cos((rawpos.x * 7.0F                      + (intime * innps))) * shfactor));\n"
@@ -869,12 +895,16 @@ ULONGLONG currnote = 0;
 ULONGLONG currnps = 0;
 
 int(WINAPI*kNPOriginal)(DWORD msg);
+void(WINAPI*kNSOriginal)(MMPlayer* syncplayer, DWORD dwDelta);
 static int WINAPI kNPIntercept(DWORD note)
 {
     if(((BYTE)note & 0xF0) == 0x90 && (BYTE)(note >> 8))
         currnote++;
     
-    return kNPOriginal(note);
+    if(kNPOriginal)
+        return kNPOriginal(note);
+    else
+        return 0;
 }
 
 static void kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
@@ -904,9 +934,14 @@ static void kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
     
     currnote = 0;
     
+    /*
     #ifdef DYNASCROLL
     return NoteSync(syncplayer, dwDelta);
     #endif
+    */
+    
+    if(kNSOriginal)
+        kNSOriginal(syncplayer, dwDelta);
 }
 #endif
 
@@ -1005,17 +1040,21 @@ static int WINAPI FPS_ShortMsg(DWORD note)
 }
 
 #ifdef TIMI_IMPRECISE
-#define NEXTFRAME ((10000000ULL / FPS_DENIM) * FPS_frame * FPS_NOMIN)
+#define NEXTFRAME ((10000000ULL / FPS_DENIM) * player->timediv * FPS_frame * FPS_NOMIN)
 #else
-#define NEXTFRAME ((10000000ULL * FPS_frame * FPS_NOMIN) / FPS_DENIM)
+#define NEXTFRAME ((10000000ULL * FPS_frame * FPS_NOMIN * player->timediv) / FPS_DENIM)
 #endif
 
 
 static void FPS_SyncFunc(MMPlayer* syncplayer, DWORD dwDelta)
 {
     ULONGLONG nextframe = NEXTFRAME;
-    if(nextframe <= player->RealTime)
+    if(nextframe <= player->RealTimeUndiv)
     {
+        #ifdef TIMI_CUSTOMSCROLL
+        FPS_scroll = nextframe;
+        #endif
+        
         int(WINAPI*NtDelayExecution)(BOOL doalert, INT64* timeptr)
                 = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtDelayExecution");
         
@@ -1040,7 +1079,7 @@ static void FPS_SyncFunc(MMPlayer* syncplayer, DWORD dwDelta)
         for(;;)
         {
             nextframe = NEXTFRAME;
-            if(nextframe <= player->RealTime)
+            if(nextframe <= player->RealTimeUndiv)
             {
                 puts("Frame drop");
                 
@@ -1052,6 +1091,10 @@ static void FPS_SyncFunc(MMPlayer* syncplayer, DWORD dwDelta)
                     NtDelayExecution(TRUE, &sleep);
                 }
                 while(FPS_capture);
+                
+                #ifdef TIMI_CUSTOMSCROLL
+                FPS_scroll = nextframe;
+                #endif
                 
                 FPS_frame++;
                 
@@ -1163,7 +1206,7 @@ static int WINAPI dwEventCallback(DWORD note)
 }
 
 #if 1
-static inline void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR color1)
+static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR color1)
 {
     if(__builtin_expect(vtxidx == vertexsize, 0))
     {
@@ -1451,7 +1494,7 @@ static inline void pianokey(float* __restrict offsx, float* __restrict offsr, BY
 }
 #endif
 
-static inline void AddVtx(NoteNode localnode, ULONGLONG currtick, float tickscale)
+static __attribute__((noinline)) void AddVtx(NoteNode localnode, ULONGLONG currtick, float tickscale)
 {
     #ifdef PIANOKEYS
     float offsx;
@@ -1627,14 +1670,24 @@ static inline KCOLOR LerpColor(KCOLOR color, KCOLOR def, float a)
 #endif
 
 #ifdef GLTEXT
-#ifdef HDR
-#error HDR is not supported yet for texts
-#endif
-static void DrawFontString(int32_t x, int32_t y, int32_t scale, KCOLOR color, const char* text)
+struct textquadpart
+{
+    float x, y;
+    GLuint color;
+    WORD u, v;
+};
+
+struct textquad
+{
+    struct textquadpart quads[4];
+};
+
+static void DrawFontString(int32_t x, int32_t y, int32_t scale, DWORD color, const char* text)
 {
     DWORD startx = x;
     
-    while(y < 72)
+    //while(y < 72)
+    for(;;)
     {
         char c = *(text++);
         if(!c)
@@ -1663,11 +1716,11 @@ static void DrawFontString(int32_t x, int32_t y, int32_t scale, KCOLOR color, co
             DWORD ux =  (c       & 0xF) << 3;
             DWORD uy = ((c >> 4) & 0xF) << 3;
             
-            struct quad* ck = quads + (vtxidx++);
-            ck->quads[0] = (struct quadpart){offsx, offst, color, ux,     uy    };
-            ck->quads[1] = (struct quadpart){offsx, offsy, color, ux,     uy + 8};
-            ck->quads[2] = (struct quadpart){offsr, offsy, color, ux + 8, uy + 8};
-            ck->quads[3] = (struct quadpart){offsr, offst, color, ux + 8, uy    };
+            struct textquad* ck = ((struct textquad*)quads) + (vtxidx++);
+            ck->quads[0] = (struct textquadpart){offsx, offst, color, ux,     uy    };
+            ck->quads[1] = (struct textquadpart){offsx, offsy, color, ux,     uy + 8};
+            ck->quads[2] = (struct textquadpart){offsr, offsy, color, ux + 8, uy + 8};
+            ck->quads[3] = (struct textquadpart){offsr, offst, color, ux + 8, uy    };
         }
         
         x += scale;
@@ -1684,6 +1737,21 @@ static DWORD notetimer = 0;
 
 static void DrawFontOverlay()
 {
+    if(vtxidx)
+    {
+        printf("Partial rendering detected! Buffer is at %i\n", vtxidx);
+        vtxidx = 0;
+    }
+    
+    #ifdef TRANSFORM
+    glClear(GL_DEPTH_BUFFER_BIT);
+    #endif
+    
+    #ifdef TEXTTRANS
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    #endif
+    
     //glEnable(GL_TEXTURE_2D);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texFont);
@@ -1705,14 +1773,21 @@ static void DrawFontOverlay()
     int textlen;
     char buf[256];
     
+    #ifndef TEXTNEAT
+    const int32_t ybase = 0;
+    #else
+    const int32_t ybase = 70;
+    #endif
+    
     #ifdef TEXTNPS
     textlen = sprintf(buf, "%llu N/s ", currnps);
-    DrawFontString(-textlen, 0, 2, -1, buf);
+    DrawFontString(-textlen, ybase - 0, 2, -1, buf);
     #endif
     
     textlen = sprintf(buf, " %llu quads", drawnotes);
-    DrawFontString(-textlen, -2, 2, -1, buf);
+    DrawFontString(-textlen, ybase - 2, 2, -1, buf);
     
+    #ifdef TEXTALLOC
     if(notealloccount != currnotealloc)
     {
         currnotealloc = notealloccount;
@@ -1722,43 +1797,76 @@ static void DrawFontOverlay()
     
     if(notetimer)
     {
-        DWORD dwColor;
+        DWORD dwColor = -1;
         
-        if(notetimer >= (1 << 24))
-            dwColor = -1;
-        else
+        #ifndef TEXTNEAT
+        if(notetimer < (1 << 24))
         {
             dwColor = (notetimer >> 16);
             dwColor |= dwColor << 8;
             dwColor |= dwColor << 16;
         }
+        #endif
         
         if(notetimer > (1 << 16))
             notetimer -= (1 << 16);
         else
             notetimer = 0;
         
-        DrawFontString(-18,  9, 2, dwColor, "__________________");
-        DrawFontString(-18, 10, 2, dwColor >> 1, "Memory allocation!");
+        #ifndef TEXTNEAT
+        #define TEXTL -textlen
+        #define TEXTR -textlen
+        #define TEXTU 10
+        #define TEXTD -7
+        #else
+        #define TEXTL -128
+        #define TEXTR 128-textlen-textlen
+        #define TEXTU 70
+        #define TEXTD 70
+        #endif
+        
+        textlen = 18;
+        DrawFontString(TEXTL, TEXTU - 1, 2, dwColor, "__________________");
+        DrawFontString(TEXTL, TEXTU - 0, 2, dwColor >> 1, "Memory allocation!");
         
         textlen = sprintf(buf, "%llu slots", currnotealloc);
-        DrawFontString(-textlen, 6, 2, dwColor, buf);
+        DrawFontString(TEXTL, TEXTU - 4, 2, dwColor, buf);
         
         textlen = sprintf(buf, "%.3fMB slots",
                           (float)(currnotealloc * sizeof(NoteNode)) / (1024.0F * 1024.0F));
-        DrawFontString(-textlen, -10, 2, dwColor, buf);
+        DrawFontString(TEXTR, TEXTD - 3, 2, dwColor, buf);
         
         textlen = sprintf(buf, "%.3fMB total",
                           (float)(midisize + (currnotealloc * sizeof(NoteNode))) / (1024.0F * 1024.0F));
-        DrawFontString(-textlen, -7, 2, dwColor >> 1, buf);
+        DrawFontString(TEXTR, TEXTD - 0, 2, dwColor >> 1, buf);
     }
+    #endif
     
+    #ifdef DEBUGTEXT
+    textlen = sprintf(buf, "BPM:   %06X | %i (%6.4f)", player->tempo, player->tempo, 60000000 / (float)player->tempo);
+    DrawFontString(-128, -60, 2, -1, buf);
     
-    glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(*quads),     0, GL_STREAM_DRAW);
-    glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(*quads), quads, GL_STREAM_DRAW);
-    glDrawElements(GL_TRIANGLES, vtxidx * NOTEVTX, GL_UNSIGNED_INT, 0);
+    textlen = sprintf(buf, "Time:  %llu / %u == %llu (%llu + %llu)",
+        player->RealTimeUndiv, player->timediv,
+        player->RealTimeUndiv / player->timediv,
+        player->RealTime, (player->RealTimeUndiv / player->timediv) - player->RealTime);
+    DrawFontString(-128, -58, 2, -1, buf);
     
-    vtxidx = 0;
+    textlen = sprintf(buf, "Ticks: %llu", player->TickCounter);
+    DrawFontString(-128, -56, 2, -1, buf);
+    
+    textlen = sprintf(buf, "TPS:   %14f", 1e6 * player->timediv / (double)player->tempo);
+    DrawFontString(-128, -54, 2, -1, buf);
+    #endif
+    
+    if(vtxidx)
+    {
+        //glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(struct textquad),     0, GL_STREAM_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(struct textquad), quads, GL_STREAM_DRAW);
+        glDrawElements(GL_TRIANGLES, vtxidx * NOTEVTX, GL_UNSIGNED_INT, 0);
+        
+        vtxidx = 0;
+    }
     
     glDisableVertexAttribArray(attrFontUV);
     glDisableVertexAttribArray(attrFontColor);
@@ -1768,6 +1876,10 @@ static void DrawFontOverlay()
     glBindTexture(GL_TEXTURE_2D, 0);
     //glActiveTexture(0);
     //glDisable(GL_TEXTURE_2D);
+    
+    #ifdef TEXTTRANS
+    glDisable(GL_BLEND);
+    #endif
 }
 #endif
 
@@ -1779,7 +1891,61 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     isrender = FALSE;
     
+    wglMakeCurrent(dc, glctx);
+
+    glEnable(GL_DEBUG_OUTPUT);
+    glDebugMessageCallbackARB(DebugCB, 0);
+    
+    #ifndef TIMI_CAPTURE
+    uglSwapControl(1);
+    #else
+    uglSwapControl(0);
+    #endif
+    
+    glViewport(0, 0, 1280, 720);
+    
 #ifdef TIMI_CAPTURE
+    const POINT capsize =
+    {
+        .x = CAPW,
+        .y = CAPH
+    };
+    
+    glViewport(0, 0, capsize.x, capsize.y);
+    
+    GLuint cap_fb = 0;
+    glGenFramebuffers(1, &cap_fb);
+    glBindFramebuffer(GL_FRAMEBUFFER, cap_fb);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, cap_fb);
+    
+    GLuint cap_rb = 0;
+    glGenRenderbuffers(1, &cap_rb);
+    glBindRenderbuffer(GL_RENDERBUFFER, cap_rb);
+    glRenderbufferStorage(GL_RENDERBUFFER,
+    //#ifdef HDR
+        uglSupportsExt("WGL_EXT_framebuffer_sRGB")
+        ? GL_SRGB8_ALPHA8
+        :
+    //#endif
+        GL_RGBA8
+        ,
+        capsize.x, capsize.y);
+    
+    #ifdef TRANSFORM
+    GLuint cap_db = 0;
+    glGenRenderbuffers(1, &cap_db);
+    glBindRenderbuffer(GL_RENDERBUFFER, cap_db);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16,
+        capsize.x, capsize.y);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, cap_db);
+    
+    glBindRenderbuffer(GL_RENDERBUFFER, cap_rb);
+    #endif
+    
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, cap_rb);
+    
+    
+    #ifndef TIMI_NOCAPTURE
     HANDLE hpipe = CreateNamedPipeW
     (
         L"\\\\.\\pipe\\MPGL_readpixels",
@@ -1796,15 +1962,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     {
         puts("Pipe error");
         PostQuitMessage(1);
+        CloseWindow(glwnd);
         return GetLastError();
     }
     
-    erect.left = 0;
-    erect.top = 0;
-    erect.bottom = 1280;
-    erect.right = 720;
-    
-    void* capdata = malloc(1280 * 720 * 4);
+    void* capdata = malloc(capsize.x * capsize.y * 4);
+    #endif
 #endif
 
 #if defined(HDR) && !defined(FASTHDR)
@@ -1944,19 +2107,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     //UNUSED for now
     //trackcount >>= 12; // undo 16 * 256
-    
-    wglMakeCurrent(dc, glctx);
-
-    glEnable(GL_DEBUG_OUTPUT);
-    glDebugMessageCallbackARB(DebugCB, 0);
-    
-    #ifndef TIMI_CAPTURE
-    uglSwapControl(1);
-    #else
-    uglSwapControl(0);
-    #endif
-    
-    glViewport(0, 0, 1280, 720);
     
     CompileStandardShader();
     
@@ -2160,8 +2310,29 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     player->SleepTimeMax = 0;
     player->SleepTicks = 1;
     player->KLongMsg = dwLongMsg;
+    
+    
+    #ifdef TIMI_CAPTURE
+    ULONGLONG timersync = ~0;
+    timersync = timersync >> 2;
+    
+    #ifndef TIMI_NOCAPTURE
+    player->SyncPtr = (LONGLONG*)&timersync;
+    player->SyncOffset = 0;
+    #endif
+    
+    #ifdef TIMI_SILENT
+    player->KShortMsg = FPS_ShortMsg;
+    #endif
+    player->KSyncFunc = FPS_SyncFunc;
+    
+    ply->SleepTicks = 1;
+    ply->SleepTimeMax = 0;
+    #endif
+    
     #if defined(TEXTNPS)
     kNPOriginal = player->KShortMsg;
+    kNSOriginal = player->KSyncFunc;
     player->KShortMsg = kNPIntercept;
     player->KSyncFunc = kNPSync;
     #elif defined(DYNASCROLL)
@@ -2187,17 +2358,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     #endif
     
     #ifdef TIMI_CAPTURE
-    ULONGLONG timersync = ~0;
-    timersync = timersync >> 2;
-    
-    player->SyncPtr = (LONGLONG*)&timersync;
-    player->SyncOffset = 0;
-    
-    player->KShortMsg = FPS_ShortMsg;
-    player->KSyncFunc = FPS_SyncFunc;
-    
-    ply->SleepTicks = 1;
-    ply->SleepTimeMax = 0;
+    if(!player->KShortMsg)
+        player->KShortMsg = FPS_ShortMsg;
     #endif
     
     CreateThread(0, 0x4000, PlayerThread,    ply, 0, 0);
@@ -2237,6 +2399,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     midisize += sizeof(KeyNotes);
     #endif
     
+    #ifdef TIMI_CAPTURE
+    FPS_capture = TRUE;
+    #endif
+    
     while(!(WaitForSingleObject(vsyncevent, timeout) >> 9))
     {
         if(canrender && !isrender)
@@ -2245,18 +2411,32 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             
             isrender = TRUE;
             
-            #ifdef TIMI_CAPTURE
+            #if defined(TIMI_CAPTURE) && !defined(TIMI_NOCAPTURE)
             
             player->SyncPtr = (LONGLONG*)&timersync;
             player->SyncOffset = 0;
             
-            player->KShortMsg = FPS_ShortMsg;
-            player->KSyncFunc = FPS_SyncFunc;
+            //player->KShortMsg = FPS_ShortMsg;
+            //player->KSyncFunc = FPS_SyncFunc;
             #endif
         }
         
+        #ifdef TIMI_CAPTURE
+        if(!FPS_capture && player->tracks->ptrs)
+        {
+            timeout = 1;
+            continue;
+        }
+        
+        timeout = 0;
+        #endif
+        
         ResetEvent(vsyncevent);
         
+        #ifdef TIMI_CAPTURE
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, cap_fb);
+        glViewport(0, 0, capsize.x, capsize.y);
+        #endif
         
         glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
         //glClearDepth(1.0);
@@ -2297,13 +2477,19 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         ULONGLONG notesync = mmnotesync;
         ULONGLONG currtick = syncvalue;
         #else
-        ULONGLONG notesync = TICKVAR;
-        ULONGLONG currtick = TICKVAL;
-        DWORD tickheight = (2500000
+        DWORD tickheight =
+        #ifdef CUSTOMTICK
+        CUSTOMTICK
+        ;
+        #else
+        (2500000
         #if defined(TRANSFORM) || defined(ROTAT)
         * 4
         #endif
         ) / player->tempomulti;
+        #endif
+        ULONGLONG notesync = TICKVAR;
+        ULONGLONG currtick = TICKVAL;
         float tickscale = 1.0F / (float)tickheight;
         #endif
         
@@ -2433,6 +2619,23 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             
             AddVtx(localnode, currtick, tickscale);
         }
+        
+        #ifdef DEBUGTEXT
+        LONGLONG debugtick = currtick - (currtick % player->timediv) - player->timediv - player->timediv;
+        do
+        {
+            debugtick += player->timediv;
+            
+            NoteNode debugnode;
+            debugnode.next = 0;
+            debugnode.uid = 0;
+            debugnode.start = debugtick;
+            debugnode.end = debugtick + (player->timediv >> 1) + (player->timediv >> 2);
+            
+            AddVtx(debugnode, currtick, tickscale);
+        }
+        while((LONGLONG)(debugtick - toptick) < 0);
+        #endif
         
         if(!freelist_return)
         {
@@ -2694,13 +2897,25 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         glUseProgram(0);
         //glFlush();
         
+        #ifndef TIMI_CAPTURE
         InvalidateRect(glwnd, 0, 0);
         uglSwapBuffers(dc);
         
         glViewport(erect.left, erect.top, erect.right - erect.left, erect.bottom - erect.top);
+        #endif
+        
+        /*
+        #ifdef TIMI_CAPTURE
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glBlitFramebuffer(
+            0, 0, capsize.x, capsize.y,
+            erect.left, erect.top, erect.right -  erect.left, erect.bottom - erect.top,
+            GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        #endif
+        */
         
         NtQuerySystemTime(&currtime);
-        #ifndef TIMI_CAPTURE
+        #if !defined(TIMI_CAPTURE)// || defined(TIMI_NOCAPTURE)
         if((currtime - prevtime) >> 18)
             timeout = 0;
         else
@@ -2713,14 +2928,24 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         {
             FPS_capture = FALSE;
             
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            glBlitFramebuffer(
+                0, 0, capsize.x, capsize.y,
+                erect.left, erect.top, erect.right -  erect.left, erect.bottom - erect.top,
+                GL_COLOR_BUFFER_BIT, GL_LINEAR);
+            
+            InvalidateRect(glwnd, 0, 0);
+            uglSwapBuffers(dc);
+            
+            #ifndef TIMI_NOCAPTURE
             glReadPixels(
-                0, 0, 1280, 720,
+                0, 0, capsize.x, capsize.y,
                 GL_BGRA, GL_UNSIGNED_BYTE,
                 capdata
             );
             
             DWORD written;
-            while(!WriteFile(hpipe, capdata, 1280 * 720 * 4, &written, 0))
+            while(!WriteFile(hpipe, capdata, capsize.x * capsize.y * 4, &written, 0))
             {
                 printf("Pipe error %08X\n", GetLastError());
                 switch(GetLastError())
@@ -2740,12 +2965,38 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                     }
                 }
             }
+            #endif
+            
+            glViewport(erect.left, erect.top, erect.right - erect.left, erect.bottom - erect.top);
         }
         #endif
         
         //#ifndef KEYBOARD
         if(player->tracks->ptrs)
             continue;
+        
+        #ifdef GRACE
+        #ifdef KEYBOARD
+        vtxidx = 0;
+        for(DWORD i = 0; i != 128; i++)
+        {
+            if(KeyNotes[i].start || KeyNotes[i].uid)
+            {
+                vtxidx = 1;
+                break;
+            }
+        }
+        
+        if(vtxidx)
+            continue;
+        #endif
+        
+        if(midisize)
+        {
+            midisize >>= 1;
+            continue;
+        }
+        #endif
         
         puts("MIDI end");
         
@@ -2765,12 +3016,14 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     ded:
     
-#ifdef TIMI_CAPTURE
+    wglMakeCurrent(0, 0);
+    
+#if defined(TIMI_CAPTURE) && !defined(TIMI_NOCAPTURE)
     CloseHandle(hpipe);
     PostQuitMessage(1);
+    CloseWindow(glwnd);
 #endif
     
-    wglMakeCurrent(0, 0);
     
     puts("Renderer died");
     
