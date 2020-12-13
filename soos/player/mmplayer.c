@@ -11,6 +11,8 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     
     MMPlayer* player = (MMPlayer*)lpParameter;
     
+    player->done = 0;
+    
     int(WINAPI*NtDelayExecution)(int doalert, INT64* timeptr) = 0;
     int(WINAPI*NtQuerySystemTime)(ULONGLONG* timeptr) = 0;
     
@@ -122,7 +124,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                     msg.prm1 = *(ptrs++);
                     msg.prm2 = *(ptrs++);
                     
-                    if((msg.prm2 != 1 && msg.prm1 < 0x80) || player->SyncPtr)
+                    if(msg.prm2 != 1 || player->SyncPtr)
                         KShortMsg(*(DWORD*)&msg);
                     
                     goto cmdend;
@@ -331,6 +333,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                     minsleep = tempomaxsleep;
                 counter += minsleep;
                 INT32 sleeptime = (INT32)(minsleep * tempomulti);
+                player->RealTimeUndiv += minsleep * player->tempo * 10;
                 player->RealTime += sleeptime;
                 player->TickCounter = counter;
                 
@@ -371,9 +374,13 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
         {
             if(player->RealTime < (*player->SyncPtr + player->SyncOffset))
             {
+                if(tempomaxsleep && minsleep > tempomaxsleep)
+                    minsleep = tempomaxsleep;
+                
                 counter += minsleep;
                 player->TickCounter = counter;
                 DWORD sleeptime = (DWORD)(minsleep * tempomulti);
+                player->RealTimeUndiv += minsleep * player->tempo * 10;
                 player->RealTime += sleeptime;
                 
                 if(player->KSyncFunc)
@@ -394,6 +401,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
         }
     }
     
+    player->done = 1;
     puts("Player died :(");
     
     return 0;

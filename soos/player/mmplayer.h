@@ -26,12 +26,13 @@ typedef struct MMPlayer
     DWORD tempo;
     DWORD tempomulti;
     WORD timediv;
-    WORD _padding;
+    WORD done;
     int(WINAPI*KShortMsg)(DWORD msg);
     int(WINAPI*KLongMsg)(DWORD msg, LPCVOID buf, DWORD len);
     void(*KSyncFunc)(struct MMPlayer* player, DWORD dwDelta);
     LONGLONG* SyncPtr;
     LONGLONG SyncOffset;
+    LONGLONG RealTimeUndiv;
 } MMPlayer;
 
 MMPlayer* mmpDuplicatePlayer(const MMPlayer* other);
