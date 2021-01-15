@@ -12,21 +12,21 @@
 #include "player/mmplayer.h"
 
 
-#define TRACKID
-//#define PFACOLOR
-//#define PFAKEY
+//#define TRACKID
+#define PFACOLOR
+#define PFAKEY
 //#define ROUNDEDGE
-#define TRANSFORM
+//#define TRANSFORM
 #define PIANOKEYS
 //#define DYNASCROLL
-#define O3COLOR
-//#define OUTLINE
+//#define O3COLOR
+#define OUTLINE
 #define KEYBOARD
 //#define TRIPPY
 //#define WIDEMIDI
 //#define TIMI_TIEMR
-#define ROTAT
-//#define GLOW
+//#define ROTAT
+#define GLOW
 //#define SHTIME
 //#define WOBBLE
 //#define WOBBLE_INTERP
@@ -37,10 +37,11 @@
 //#define SHWOBBLE
 //#define HDR
 //#define NOKEYBOARD
-#define TIMI_CAPTURE
+//#define TIMI_CAPTURE
 //#define TIMI_NOCAPTURE
 //#define TIMI_IMPRECISE
-#define TIMI_SILENT
+//#define TIMI_SILENT
+//#define TIMI_NOWAIT
 //#define TIMI_CUSTOMSCROLL
 //#define FASTHDR
 //#define TEXTALLOC
@@ -48,11 +49,18 @@
 #define TEXTTRANS
 #define GRACE
 #define DEBUGTEXT
+//#define OLDDENSE
+//#define NOISEOVERLAY
+#define BUGFIXTEST
+#define NORENDEROPT
 
-#define CUSTOMTICK 3840*4
+#define CUSTOMTICK player->timediv
 
 #define CAPW 1920
 #define CAPH 1080
+
+//#define BLITMODE GL_NEAREST
+#define BLITMODE GL_LINEAR
 
 
 #ifdef PIANOKEYS
@@ -62,8 +70,8 @@ const DWORD keymul = 1;
 #endif
 
 #ifdef TIMI_CAPTURE
-const ULONGLONG FPS_DENIM = 625*8;//28125;//3840;
-const ULONGLONG FPS_NOMIN = 100;//130;
+const ULONGLONG FPS_DENIM = 60;//625*4;//28125;//3840;
+const ULONGLONG FPS_NOMIN = 1;//100;//130;
 ULONGLONG FPS_frame = 0;
 volatile BOOL FPS_capture = FALSE;
 
@@ -205,6 +213,8 @@ static void CompileStandardShader()
     
     const char* shadera =
         "#version 330 core\n"
+        "out vec2 trigpos_v;\n"
+        "flat out vec2 trigpos;\n"
     #ifdef SHTIME
         "uniform float intime;\n"
     #endif
@@ -312,6 +322,8 @@ static void CompileStandardShader()
     #else
         "   gl_Position = vec4(vtxpos.xy, 0.0F, 1.0F);\n"
     #endif
+        "   trigpos_v = vtxpos.xy;\n"
+        "   trigpos = vtxpos.xy;\n"
         "}\n"
         ;
 
@@ -322,6 +334,11 @@ static void CompileStandardShader()
     {
     #endif
         "#version 330 core\n"
+        "in vec2 trigpos_v;\n"
+        "flat in vec2 trigpos;\n"
+    #ifdef SHTIME
+        "uniform float intime;\n"
+    #endif
     #ifndef PFAKEY
         "flat "
     #endif
@@ -337,6 +354,69 @@ static void CompileStandardShader()
         "    vec3 gray = vec3(dot(vec3(0.2126F,0.7152F,0.0722F), c));\n"
         "    return vec3(mix(gray, c, amt));\n"
         "}\n"
+    #endif
+    #ifdef NOISEOVERLAY
+"\
+vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }\
+\
+float snoise(vec2 v){\
+  const vec4 C = vec4(0.211324865405187, 0.366025403784439,\
+           -0.577350269189626, 0.024390243902439);\
+  vec2 i  = floor(v + dot(v, C.yy) );\
+  vec2 x0 = v -   i + dot(i, C.xx);\
+  vec2 i1;\
+  i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);\
+  vec4 x12 = x0.xyxy + C.xxzz;\
+  x12.xy -= i1;\
+  i = mod(i, 289.0);\
+  vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 ))\
+  + i.x + vec3(0.0, i1.x, 1.0 ));\
+  vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy),\
+    dot(x12.zw,x12.zw)), 0.0);\
+  m = m*m ;\
+  m = m*m ;\
+  vec3 x = 2.0 * fract(p * C.www) - 1.0;\
+  vec3 h = abs(x) - 0.5;\
+  vec3 ox = floor(x + 0.5);\
+  vec3 a0 = x - ox;\
+  m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );\
+  vec3 g;\
+  g.x  = a0.x  * x0.x  + h.x  * x0.y;\
+  g.yz = a0.yz * x12.xz + h.yz * x12.yw;\
+  return 130.0 * dot(m, g);\
+}\
+"
+"\
+vec2 rotate(vec2 v, float a)\
+{\
+	float s = sin(a);\
+	float c = cos(a);\
+	mat2 m = mat2(c, -s, s, c);\
+	return m * v;\
+}\
+"
+"\
+const mat3 rgb2yiq = mat3(0.299, 0.596, 0.211,\
+                    0.587, -0.274, -0.523,\
+                    0.114, -0.322, 0.312);\
+const mat3 yiq2rgb = mat3(1, 1, 1,\
+                    0.956, -0.272, -1.106,\
+                    0.621, -0.647, 1.703);\
+vec3 rotat(vec3 col, float rota)\
+{\
+    vec3 org = rgb2yiq * col;\
+    vec3 rot = vec3(org.x, rotate(org.yz, rota));\
+    vec3 res = yiq2rgb * rot;\
+    return res;\
+}\
+vec3 rotat_yuv(vec3 col, float y, float uv, float rota)\
+{\
+    vec3 org = rgb2yiq * col;\
+    vec3 rot = vec3(org.x * y, rotate(org.yz, rota) * uv);\
+    vec3 res = yiq2rgb * rot;\
+    return res;\
+}\
+"
     #endif
     #ifdef HDR
         "in vec2 npos;\n"
@@ -499,6 +579,25 @@ static void CompileStandardShader()
         #endif
         ", pcolor.w);\n"
     #endif
+    #ifdef NOISEOVERLAY
+        //"   float coy = ((gl_FragCoord.y / 720.0F) - 0.5F) * 2.0F;\n"
+        "   float coy = trigpos_v.y;\n"
+        "   float cox = trigpos_v.x;\n"
+        #ifdef SHTIME
+        "   coy += intime;\n"
+        "   cox += sin(intime * 2.0F) * (1.0F / 32.0F);\n"
+        "   cox += sin(coy * 0.8F) * (1.0F / 16.0F);\n"
+        "   float cys = coy - (trigpos.y * 1.02F);\n"
+        #else
+        "   float cys = coy - (trigpos.y * 1.1F);\n"
+        #endif
+        "   vec2 colorpos = vec2((cox * 2.0F) + ((cos(coy * 2.6F) + sin(cys * 1.1F)) * (1.0F / 16.0F)), cys + ((sin(coy * 1.4F) + 1.1F) * 0.0625));\n"
+        //"   float nr = snoise(colorpos * vec2(4.0F));"
+        "   float nr = clamp(snoise(colorpos * vec2(16.0F)) + snoise(vec2(0.341F, 0.897F) + colorpos * vec2(7.6F)), 0.0F, 1.0F);"
+        "   outcolor = vec4(rotat(outcolor.xyz, nr), outcolor.w);\n"
+        //"   outcolor = vec4(rotat_yuv(outcolor.xyz, (1.0F + (nr * 0.5F)), 1.0F, 0.0F), outcolor.w);\n"
+        //"   outcolor = pcolor * length(colorpos);\n"
+    #endif
         "}\n"
     #if defined(HDR) && !defined(GLOWEDGE) && !defined(ROUNDEDGE)
     }
@@ -596,6 +695,7 @@ GLuint texFont;
 
 #ifdef TEXTNPS
 struct histogram* hist;
+ULONGLONG notecounter;
 #endif
 #ifdef SHNPS
 
@@ -603,6 +703,7 @@ GLint uniFontTime;
 GLint uniFontNPS;
 #endif
 GLint uniFontTex;
+GLint uniFontBg;
 
 GLuint fontsh;
 GLint attrFontColor;
@@ -652,13 +753,14 @@ void CompileFontShader()
 
     const char* shaderb =
         "#version 330 core\n"
-        "uniform sampler2D fonTex;"
+        "uniform sampler2D fonTex;\n"
+        "uniform vec4 bgcolor;\n"
         "in vec4 pcolor;\n"
         "in vec2 puv;\n"
         "out vec4 outcolor;\n"
         "void main()\n"
         "{\n"
-        "   outcolor = texture2D(fonTex, puv) * pcolor;\n"
+        "   outcolor = mix(bgcolor, pcolor, texture2D(fonTex, puv));\n"
         "}\n"
         ;
     
@@ -720,6 +822,7 @@ void CompileFontShader()
     uniFontNPS = glGetUniformLocation(fontsh, "innps");
     #endif
     uniFontTex = glGetUniformLocation(fontsh, "fonTex");
+    uniFontBg = glGetUniformLocation(fontsh, "bgcolor");
     
     //glEnable(GL_TEXTURE_2D);
     glGenTextures(1, &texFont);
@@ -759,6 +862,7 @@ void CompileFontShader()
     hist = malloc((DWORD)1e7 * 0x10);
     ZeroMemory(hist, (DWORD)1e7 * 0x10);
     midisize += (DWORD)1e7 * 0x10;
+    notecounter = 0;
     #endif
 }
 #endif
@@ -777,10 +881,49 @@ typedef struct NoteNode
     DWORD uid;
     ULONGLONG start;
     ULONGLONG end;
+#ifdef BUGFIXTEST
+    struct NoteNode* overlapped_voce;
+    size_t junk;
+#endif
 } NoteNode;
 
 static MMPlayer* ply;
 static MMPlayer* player;
+
+/*
+main
+- NoteFree
+  - freelist_head = node
+  - freelist = node->next = freelist
+
+- VisibleNoteList = 0
+- VisibleNoteListHead = 0
+
+- freelist_return
+- freelist_returnhead = freelist_head
+- freelist_return = freelist
+- freelist_head = 0
+- freelist = 0
+
+notecatcher
+- NoteAppend
+  - VisibleNoteListHead->next
+  - VisibleNoteListHead = node
+  
+  - VisibleNoteList = node
+
+- NoteAlloc
+  - return notelist
+  - notelist = notelist->next
+
+- NoteReturn
+  - freelist_return
+  - freelist_returnhead
+  - freelist_returnhead->next = notelist
+  - notelist = freelist_return
+  - freelist_returnhead = 0
+  - freelist_return = 0
+*/
 
 static NoteNode* notelist;
 static NoteNode* freelist;
@@ -814,6 +957,7 @@ static inline void NoteAppend(NoteNode* __restrict node)
     //printf("NoteAppend %08X %lli\n", node->uid, node->start);
     
     node->next = 0; //we append at the end, so the next ptr must always be null to signal list end
+    
     if(VisibleNoteList) //VisibleNoteListHead is guaranteed to be set to a valid value
     {
         //put note at the end of the list
@@ -917,6 +1061,7 @@ static void kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
     hhist->count = currnote;
     
     currnps += currnote;
+    notecounter += currnote;
     
     struct histogram* __restrict ihist;
     
@@ -1142,6 +1287,7 @@ static int WINAPI dwEventCallback(DWORD note)
     
     if((note & 0x10) && (note >> 16) & 0xFF)
     {
+        #ifndef BUGFIXTEST
         if(node)
         {
             //filter out useless notespam
@@ -1151,23 +1297,38 @@ static int WINAPI dwEventCallback(DWORD note)
             //don't move note end if it has been previously set by notespam
             if(!~node->end)
             {
-            #ifdef ROUNDEDGE
-                if((curr - node->start) > minwidth)
+                #ifdef ROUNDEDGE
+                    if((curr - node->start) > minwidth)
+                        node->end = curr;
+                    else
+                        node->end = node->start + minwidth;
+                #else
                     node->end = curr;
-                else
-                    node->end = node->start + minwidth;
-            #else
-                node->end = curr;
-            #endif
+                #endif
             }
             //ActiveNoteList[uid] = 0; //already set below
         }
+        #endif
         
+        #ifdef BUGFIXTEST
+        NoteNode* __restrict backupnode = node;
+        
+        node = NoteAlloc();
+        
+        if(!node) //allocation failed
+            return 1;
+        
+        node->overlapped_voce = backupnode;
+        
+        ActiveNoteList[uid] = node;
+        
+        #else
         node = NoteAlloc();
         ActiveNoteList[uid] = node; //reset it no matter what
         
         if(!node) //allocation failed
             return 1;
+        #endif
         
         node->start = curr;
         node->end = ~0;
@@ -1177,6 +1338,13 @@ static int WINAPI dwEventCallback(DWORD note)
     #endif
         ;
         
+        /*
+        #ifdef BUGFIXTEST
+        node->overlapped_voce = 0;
+        node->junk = 0;
+        #endif
+        */
+        
         NoteAppend(node);
         
         return 0;
@@ -1184,6 +1352,12 @@ static int WINAPI dwEventCallback(DWORD note)
     
     if(node)
     {
+    #ifdef BUGFIXTEST
+        if(!~node->end)
+            node->end = curr;
+        
+        ActiveNoteList[uid] = node->overlapped_voce;
+    #else
         if(node->start == curr)
         {
             //end has already been set
@@ -1192,20 +1366,21 @@ static int WINAPI dwEventCallback(DWORD note)
         }
         else ActiveNoteList[uid] = 0;
         
-    #ifdef ROUNDEDGE
-        if((curr - node->start) > minwidth)
+        #ifdef ROUNDEDGE
+            if((curr - node->start) > minwidth)
+                node->end = curr;
+            else
+                node->end = node->start + minwidth;
+        #else
             node->end = curr;
-        else
-            node->end = node->start + minwidth;
-    #else
-        node->end = curr;
+        #endif
     #endif
     }
     
     return 0;
 }
 
-#if 1
+#ifndef OLDDENSE
 static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR color1)
 {
     if(__builtin_expect(vtxidx == vertexsize, 0))
@@ -1522,6 +1697,37 @@ static __attribute__((noinline)) void AddVtx(NoteNode localnode, ULONGLONG currt
     AddRawVtx(offsy, offst, offsx, offsr, colortable[localnode.uid >> 8]);
 }
 
+static __attribute__((noinline)) void AddWideVtx(ULONGLONG start, float height, ULONGLONG currtick, float tickscale, DWORD range, DWORD color)
+{
+    #ifdef PIANOKEYS
+    float offsx;
+    float offsr;
+    float dummy;
+    pianokey(&offsx, &dummy, (BYTE)(range >> 8));
+    pianokey(&dummy, &offsr, (BYTE)(range >> 0));
+    #else
+    float offsx = (BYTE)(range >> 8);
+    float offsr = (BYTE)(range >> 0);
+    #endif
+    
+    float offsy = -1.0F;
+    //if(localnode.start > currtick)
+        offsy = ((float)((int)(start - currtick)) * tickscale) - 1.0F;
+    float offst = offsy + height;
+    
+    #ifndef HDR
+    KCOLOR kc = color;
+    #else
+    KCOLOR kc;
+    kc.r = (BYTE)(color >> 0) / 255.0F;
+    kc.g = (BYTE)(color >> 8) / 255.0F;
+    kc.b = (BYTE)(color >> 16) / 255.0F;
+    kc.a = (BYTE)(color >> 24) ? ((BYTE)(color >> 24)) / 255.0F : 1.0F;
+    #endif
+    
+    AddRawVtx(offsy, offst, offsx, offsr, kc);
+}
+
 #if defined(PFACOLOR)
 static __attribute__((noinline)) KCOLOR HSV2RGB(float hue, float saturation, float value)
 {
@@ -1682,6 +1888,17 @@ struct textquad
     struct textquadpart quads[4];
 };
 
+static void FontSetBg(DWORD color)
+{
+    float bgc[4];
+    bgc[0] = (BYTE)(color >> 0) / 255.0F;
+    bgc[1] = (BYTE)(color >> 8) / 255.0F;
+    bgc[2] = (BYTE)(color >> 16) / 255.0F;
+    bgc[3] = (BYTE)(color >> 24) / 255.0F;
+    
+    glUniform4fv(uniFontBg, 1, (GLfloat*)bgc);
+}
+
 static void DrawFontString(int32_t x, int32_t y, int32_t scale, DWORD color, const char* text)
 {
     DWORD startx = x;
@@ -1770,6 +1987,8 @@ static void DrawFontOverlay()
     glUniform1f(uniFontNPS, (float)currnps);
     #endif
     
+    FontSetBg(0xBF << 24);
+    
     int textlen;
     char buf[256];
     
@@ -1781,11 +2000,16 @@ static void DrawFontOverlay()
     
     #ifdef TEXTNPS
     textlen = sprintf(buf, "%llu N/s ", currnps);
-    DrawFontString(-textlen, ybase - 0, 2, -1, buf);
+    DrawFontString(-textlen, ybase - 2, 2, -1, buf);
     #endif
     
+    
     textlen = sprintf(buf, " %llu quads", drawnotes);
-    DrawFontString(-textlen, ybase - 2, 2, -1, buf);
+    DrawFontString(-textlen, ybase - /*0*/ 4, 2, -1, buf);
+    
+    
+    textlen = sprintf(buf, " %llu notes", notecounter);
+    DrawFontString(-textlen, ybase - 0, 2, -1, buf);
     
     #ifdef TEXTALLOC
     if(notealloccount != currnotealloc)
@@ -1855,8 +2079,76 @@ static void DrawFontOverlay()
     textlen = sprintf(buf, "Ticks: %llu", player->TickCounter);
     DrawFontString(-128, -56, 2, -1, buf);
     
-    textlen = sprintf(buf, "TPS:   %14f", 1e6 * player->timediv / (double)player->tempo);
+    textlen = sprintf(buf, "TPS:   %f", 1e6 * player->timediv / (double)player->tempo);
     DrawFontString(-128, -54, 2, -1, buf);
+    
+    int32_t debugbase = 60;
+    int32_t notex = -126;
+    
+    uint32_t nactivid = 0;
+    NoteNode* note = ActiveNoteList[nactivid];
+    
+    do
+    {
+        while(!note && nactivid < 0xFFF)
+            note = ActiveNoteList[++nactivid];
+        
+        if(note)
+        {
+            sprintf(buf, "%8X %20llu %lli", note->uid, note->start, !~note->end ? -1LL : (note->end - note->start));
+            DrawFontString(notex, debugbase, 2, -1, buf);
+            
+            
+            note = note->overlapped_voce;
+            
+        }
+        else
+        {
+            DrawFontString(notex, debugbase, 2, -1, "[end]");
+            break;
+        }
+        
+        debugbase -= 2;
+    }
+    while(debugbase > -50);
+        
+    if(note || nactivid < 0xFFF)
+        DrawFontString(notex, debugbase - 2, 2, -1, "[...]");
+    
+    
+    notex = 0;
+    debugbase = 60;
+    
+    note = VisibleNoteList;
+    
+    if(!note)
+        DrawFontString(notex, debugbase, 2, -1, "* No active notes for this channel*");
+    else
+    {
+        do
+        {
+            if(note)
+            {
+                sprintf(buf, "%8X %20llu %lli", note->uid, note->start, !~note->end ? -1LL : (note->end - note->start));
+                DrawFontString(notex, debugbase, 2, -1, buf);
+                
+                
+                note = note->next;
+                
+            }
+            else
+            {
+                DrawFontString(notex, debugbase, 2, -1, "[end]");
+                break;
+            }
+            
+            debugbase -= 2;
+        }
+        while(debugbase > -50);
+        
+        if(note)
+            DrawFontString(notex, debugbase - 2, 2, -1, "[...]");
+    }
     #endif
     
     if(vtxidx)
@@ -1896,7 +2188,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     glEnable(GL_DEBUG_OUTPUT);
     glDebugMessageCallbackARB(DebugCB, 0);
     
-    #ifndef TIMI_CAPTURE
+    #if !defined(TIMI_CAPTURE) || defined(TIMI_NOWAIT)
     uglSwapControl(1);
     #else
     uglSwapControl(0);
@@ -1917,6 +2209,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     glGenFramebuffers(1, &cap_fb);
     glBindFramebuffer(GL_FRAMEBUFFER, cap_fb);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, cap_fb);
+    
+    if(uglSupportsExt("WGL_EXT_framebuffer_sRGB"))
+        glEnable(GL_FRAMEBUFFER_SRGB);
     
     GLuint cap_rb = 0;
     glGenRenderbuffers(1, &cap_rb);
@@ -2220,12 +2515,22 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                     
                     //fucking trigger indexes 
                     
-                    indexes[i++] = vidx + 2;
+                    /*indexes[i++] = vidx + 2;
                     indexes[i++] = vidx + 0;
                     indexes[i++] = vidx + 1;
+                    */
+                    /*indexes[i++] = vidx + 0;
+                    indexes[i++] = vidx + 2;
+                    indexes[i++] = vidx + 3;*/
+                    
+                    
+                    indexes[i++] = vidx + 3;
                     indexes[i++] = vidx + 0;
+                    indexes[i++] = vidx + 1;
                     indexes[i++] = vidx + 2;
                     indexes[i++] = vidx + 3;
+                    indexes[i++] = vidx + 1;
+                    
                 #endif
                     
                     vidx += QUADCOUNT;
@@ -2321,10 +2626,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     player->SyncOffset = 0;
     #endif
     
+    #ifndef TIMI_NOWAIT
     #ifdef TIMI_SILENT
     player->KShortMsg = FPS_ShortMsg;
     #endif
     player->KSyncFunc = FPS_SyncFunc;
+    #endif
     
     ply->SleepTicks = 1;
     ply->SleepTimeMax = 0;
@@ -2421,7 +2728,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             #endif
         }
         
-        #ifdef TIMI_CAPTURE
+        #if defined(TIMI_CAPTURE) && !defined(TIMI_NOWAIT)
         if(!FPS_capture && player->tracks->ptrs)
         {
             timeout = 1;
@@ -2545,9 +2852,40 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         glUniform1f(attrNotemix, 1);
         #endif
         
+        #if defined(DEBUGTEXT) && defined(NOISEOVERLAY)
+        {
+            LONGLONG asdtick = currtick - (currtick % player->timediv) - player->timediv - player->timediv;
+            do
+            {
+                asdtick += player->timediv;
+                
+                for(int asdi = 0; asdi != 0x80; asdi++)
+                {
+                    NoteNode debugnode;
+                    debugnode.next = 0;
+                    debugnode.uid = asdi;
+                    debugnode.start = asdtick;
+                    debugnode.end = asdtick + player->timediv;
+                    
+                    AddVtx(debugnode, currtick, tickscale);
+                    
+                    //AddWideVtx(currtick, 2.0F, currtick, tickscale, asdi | (asdi << 8), 0xFF7F7F7F);
+                }
+                
+                AddWideVtx((ULONGLONG)asdtick, 1.0F / 64.0F, currtick, tickscale, 0x7F, -1);
+                
+            }
+            while((LONGLONG)(asdtick - toptick) < 0);
+            
+            if(vtxidx)
+                FlushToilet();
+        }
+        #endif
+        
         NoteNode* prevnote = 0;
         NoteNode* currnote = VisibleNoteList;
         
+        #ifndef NORENDEROPT
         //loop over freeable notes first
         while(currnote && currnote->start <= currtick) // already triggered
         {
@@ -2586,15 +2924,20 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 }
                 else if(VisibleNoteList == currnote)
                 {
+                    /*
                     if(VisibleNoteList == VisibleNoteListHead)
                     {
-                        VisibleNoteList = 0;
-                        VisibleNoteListHead = 0;
+                        NoteNode* nextnode = currnote->next;
+                        VisibleNoteList = nextnode;
+                        //VisibleNoteListHead = 0;
                         
                         NoteFree(currnote);
-                        currnote = 0;
+                        currnote = nextnode;
                         break;
                     }
+                    */
+                    
+                    prevnote = 0;
                     
                     NoteNode* nn = currnote->next;
                     VisibleNoteList = nn;
@@ -2619,8 +2962,77 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             
             AddVtx(localnode, currtick, tickscale);
         }
+        #else
+        
+        while(currnote)
+        {
+            if(currnote->end > currtick)
+            {
+                NoteNode localnode = *currnote;
+                prevnote = currnote;
+                currnote = localnode.next;
+                
+                if(localnode.start < toptick)
+                    AddVtx(localnode, currtick, tickscale);
+            }
+            else
+            {
+                if(prevnote)
+                {
+                    NoteNode* nn = currnote->next;
+                    prevnote->next = nn;
+                    
+                    NoteFree(currnote);
+                    currnote = nn;
+                    
+                    continue;
+                }
+                else if(VisibleNoteList == currnote)
+                {
+                    /*
+                    if(VisibleNoteList == VisibleNoteListHead)
+                    {
+                        VisibleNoteList = 0;
+                        VisibleNoteListHead = 0;
+                        
+                        if(currnote->next)
+                            puts("Oh no, eventual consistency is broken!");
+                        
+                        NoteFree(currnote);
+                        currnote = 0;
+                        break;
+                    }*/
+                    
+                    prevnote = 0;
+                    
+                    NoteNode* nn = currnote->next;
+                    VisibleNoteList = nn;
+                    NoteFree(currnote);
+                    currnote = nn;
+                    continue;
+                }
+                else
+                {
+                    puts("WAT HOW");
+                    break;
+                }
+            }
+        }
+        
+        #endif
+        
+        if(vtxidx)
+            FlushToilet();
+        
+        #ifdef GLTEXT
+        drawnotes = drawnotesraw + vtxidx;
+        #endif
         
         #ifdef DEBUGTEXT
+        #if defined(HDR) && defined(TRIPPY)
+        glUniform1f(attrNotemix, 0);
+        #endif
+        
         LONGLONG debugtick = currtick - (currtick % player->timediv) - player->timediv - player->timediv;
         do
         {
@@ -2633,8 +3045,13 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             debugnode.end = debugtick + (player->timediv >> 1) + (player->timediv >> 2);
             
             AddVtx(debugnode, currtick, tickscale);
+            
+            AddWideVtx((ULONGLONG)debugtick, 1.0F / 64.0F, currtick, tickscale, 0x7F, -1);
         }
         while((LONGLONG)(debugtick - toptick) < 0);
+        
+        if(vtxidx)
+            FlushToilet();
         #endif
         
         if(!freelist_return)
@@ -2644,9 +3061,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             freelist_return = freelist;
             freelist = 0;
         }
-        
-        if(vtxidx)
-            FlushToilet();
         
         /*if(TICKVAR < toptick)
         do
@@ -2667,10 +3081,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             vtxidx++;
         }
         while(0);*/
-        
-        #ifdef GLTEXT
-        drawnotes = drawnotesraw + vtxidx;
-        #endif
         
         #ifdef KEYBOARD
         
@@ -2915,7 +3325,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         */
         
         NtQuerySystemTime(&currtime);
-        #if !defined(TIMI_CAPTURE)// || defined(TIMI_NOCAPTURE)
+        #if !defined(TIMI_CAPTURE) || defined(TIMI_NOWAIT) // || defined(TIMI_NOCAPTURE)
         if((currtime - prevtime) >> 18)
             timeout = 0;
         else
@@ -2924,7 +3334,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         prevtime = currtime;
         
         #ifdef TIMI_CAPTURE
+        #ifndef TIMI_NOWAIT
         if(FPS_capture)
+        #endif
         {
             FPS_capture = FALSE;
             
@@ -2932,7 +3344,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             glBlitFramebuffer(
                 0, 0, capsize.x, capsize.y,
                 erect.left, erect.top, erect.right -  erect.left, erect.bottom - erect.top,
-                GL_COLOR_BUFFER_BIT, GL_LINEAR);
+                GL_COLOR_BUFFER_BIT, BLITMODE);
             
             InvalidateRect(glwnd, 0, 0);
             uglSwapBuffers(dc);

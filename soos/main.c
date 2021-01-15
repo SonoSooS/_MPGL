@@ -20,6 +20,9 @@ extern DWORD (WINAPI*mGetModuleBaseNameA)
     DWORD   nSize
 );
 
+//#define CUSTOMTITLE L"PFA mode"
+//#define CUSTOMTITLE L"render"
+#define CUSTOMTITLE L"no antispam"
 //#define TRIPLEO
 //#define NOBUF
 //#define FULLSCREEN
@@ -882,8 +885,11 @@ int main(int argc, char** argv)
         windowexstyle,
         WClassName,
         L"MIDIPlayer OpenGL"
+#ifdef CUSTOMTITLE
+        L" (" CUSTOMTITLE L")"
+#endif
 #ifdef TRIPLEO
-        L" (ooo000 edidion)"
+        L" (ooo000 edition)"
 #endif
         ,
         windowstyle,
@@ -910,7 +916,7 @@ int main(int argc, char** argv)
     MSG msg;
     ZeroMemory(&msg, sizeof(msg));
     
-    while(GetMessageW(&msg, glwnd, 0, 0) > 0)
+    while((int)GetMessageW(&msg, 0, 0, 0) > 0)
     {
         DispatchMessageW(&msg);
     }

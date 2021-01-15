@@ -35,16 +35,23 @@ INCLUDES		:= inc
 
 export DT := $(shell date +"%Y/%m/%d")
 
+ifeq ($(strip $(OVERARCH)),)
 ifeq ($(strip $(WOW64)),)
-#ARCH	:= -m64 -march=core2 -mtune=core2
-ARCH	:= -m64 -march=corei7 -mtune=corei7
-#ARCH	:= -m64 -march=core2 -mtune=corei7
+#ARCH	:= -m64
+ARCH	:= -m64 -march=core2 -mtune=core2
+#ARCH	:= -m64 -march=corei7 -mtune=corei7
 #ARCH	:= -m64 -march=k8 -mtune=k8
 else
+#ARCH	:= -m32
 ARCH	:= -m32 -march=atom -mtune=atom
+#ARCH	:= -m32 -march=prescott -mtune=prescott
+#ARCH	:= -m32 -march=pentium-m -mtune=pentium-m
+endif
+else
+ARCH	:= $(OVERARCH)
 endif
 
-CFLAGS	:=	-g -Wall -Ofast -ffast-math -ffunction-sections -fdata-sections \
+CFLAGS	:=	-g -Wall -Og -ffast-math -ffunction-sections -fdata-sections \
 			$(ARCH) \
 			-Wno-format -Wno-write-strings -Wno-unused-variable -Wno-unused-value \
 			-Wno-deprecated-declarations -Wno-pointer-arith -Wno-sign-compare \
@@ -158,7 +165,7 @@ $(BUILD): $(LPPTARGET)
 #---------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	@rm -rf $(BUILD) $(TARGET).elf out/
+	@rm -rf $(BUILD) $(OUTPUT).$(POSTFIX)
 
 
 #---------------------------------------------------------------------------------
