@@ -34,7 +34,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     
     ULONGLONG ticker = 0;
     ULONGLONG tickdiff = 0;
-    DWORD tdiff = 0;
+    INT32 tdiff = 0;
     INT32 oldsleep = 0;
     INT32 deltasleep = 0;
     
@@ -338,7 +338,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 player->TickCounter = counter;
                 
                 NtQuerySystemTime(&ticker);
-                tdiff = (DWORD)(ticker - tickdiff);
+                tdiff = (INT32)(ticker - tickdiff);
                 tickdiff = ticker;
                 
                 INT32 delt = (INT32)(tdiff - oldsleep);
@@ -351,6 +351,10 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 
                 if(player->KSyncFunc)
                     player->KSyncFunc(player, minsleep);
+                
+                //printf("\rtimer %20lli %10i %10i    ", ticker, sleeptime, deltasleep);
+                //player->_debug_deltasleep = deltasleep;
+                //player->_debug_sleeptime = sleeptime;
                 
                 //improves crash performance
                 if(sleeptime <= 0)
@@ -388,6 +392,9 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
             }
             else
             {
+                NtQuerySystemTime(&ticker);
+                tickdiff = ticker;
+                
                 INT64 mo = ~0LL;
                 NtDelayExecution(0, &mo);
                 

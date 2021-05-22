@@ -12,7 +12,7 @@
 #include "player/mmplayer.h"
 
 
-//#define TRACKID
+#define TRACKID
 #define PFACOLOR
 #define PFAKEY
 //#define ROUNDEDGE
@@ -48,16 +48,17 @@
 #define TEXTNEAT
 #define TEXTTRANS
 #define GRACE
-#define DEBUGTEXT
-//#define OLDDENSE
+//#define DEBUGTEXT
+#define OLDDENSE
 //#define NOISEOVERLAY
 #define BUGFIXTEST
-#define NORENDEROPT
+//#define NORENDEROPT
 
+//#define CUSTOMTICK player->timediv >> 3
 #define CUSTOMTICK player->timediv
 
-#define CAPW 1920
-#define CAPH 1080
+#define CAPW 720
+#define CAPH 480
 
 //#define BLITMODE GL_NEAREST
 #define BLITMODE GL_LINEAR
@@ -70,7 +71,7 @@ const DWORD keymul = 1;
 #endif
 
 #ifdef TIMI_CAPTURE
-const ULONGLONG FPS_DENIM = 60;//625*4;//28125;//3840;
+const ULONGLONG FPS_DENIM = 25;//625*4;//28125;//3840;
 const ULONGLONG FPS_NOMIN = 1;//100;//130;
 ULONGLONG FPS_frame = 0;
 volatile BOOL FPS_capture = FALSE;
@@ -1795,10 +1796,13 @@ const int dominodark[] =
     0xFFFF2D, //yellow
     0x8DFF55, //green
     0x55FFE2, //blue
+    //0x96D7F1, //(doesn't exist)
     0xD7AFFF, //lavander
     0xFF91FB  //pink
 };
+//0xAAC8EF, //(doesn't exist)
 
+/*
 const int dominolight[] =
 {
     0xFFA5A5, //red
@@ -1808,8 +1812,9 @@ const int dominolight[] =
     0x55FFE2, //blue
     0xD7AFFF, //lavander
     0xFF91FB  //pink
-};
+};*/
 #else
+/*
 const KCOLOR dominodark[] =
 {
     0x000078,
@@ -1820,7 +1825,23 @@ const KCOLOR dominodark[] =
     0x78003C,
     0x740078
 };
+*/
 
+// shitty replacement values
+const KCOLOR dominodark[] =
+{
+    0xD10000,
+    0xAB6900,
+    0x969600,
+    0x39AB00,
+    0x00AB8E,
+    //0x1883AD,
+    0x6B00D6,
+    //0xC700C0
+};
+
+
+/*
 const KCOLOR dominolight[] =
 {
     0xBBBBFF,
@@ -1831,6 +1852,7 @@ const KCOLOR dominolight[] =
     0xFFC3E1,
     0xFCACFF
 };
+*/
 #endif
 #endif
 
@@ -1952,6 +1974,13 @@ static void DrawFontString(int32_t x, int32_t y, int32_t scale, DWORD color, con
 
 static DWORD notetimer = 0;
 
+/*
+#define WMA_SIZE 16
+
+ULONGLONG* fps_wma;
+DWORD fps_wmai;
+*/
+
 static void DrawFontOverlay()
 {
     if(vtxidx)
@@ -2010,6 +2039,19 @@ static void DrawFontOverlay()
     
     textlen = sprintf(buf, " %llu notes", notecounter);
     DrawFontString(-textlen, ybase - 0, 2, -1, buf);
+    
+    /*
+    ULONGLONG wma = 0;
+    for(DWORD i = 0; i != WMA_SIZE; i++)
+    {
+        wma += fps_wma[i];
+    }
+    
+    double wmad = wma / (double)WMA_SIZE;
+    
+    textlen = sprintf(buf, "%f FPS", 1e7 / wmad);
+    DrawFontString(-textlen, ybase - 6, 2, -1, buf);
+    */
     
     #ifdef TEXTALLOC
     if(notealloccount != currnotealloc)
@@ -2082,6 +2124,7 @@ static void DrawFontOverlay()
     textlen = sprintf(buf, "TPS:   %f", 1e6 * player->timediv / (double)player->tempo);
     DrawFontString(-128, -54, 2, -1, buf);
     
+    /*
     int32_t debugbase = 60;
     int32_t notex = -126;
     
@@ -2149,6 +2192,14 @@ static void DrawFontOverlay()
         if(note)
             DrawFontString(notex, debugbase - 2, 2, -1, "[...]");
     }
+    */
+    
+    /*
+    sprintf(buf, "slp: %10i", player->_debug_sleeptime);
+    DrawFontString(-126, 70, 2, -1, buf);
+    sprintf(buf, "lag: %10i", player->_debug_deltasleep);
+    DrawFontString(-126, 68, 2, -1, buf);
+    */
     #endif
     
     if(vtxidx)
@@ -2336,7 +2387,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             }
     
     #ifdef O3COLOR
-        col = dominodark[(((i >> 4) + 6) % 7)] | (0xFF << 24);
+        col = dominodark[(((i >> 4) + 6) % (sizeof(dominodark)/sizeof(*dominodark)))] | (0xFF << 24);
         
         #ifdef HDR
         col = (((col >>  0) & 0xFF) << 16)
@@ -2710,6 +2761,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     FPS_capture = TRUE;
     #endif
     
+    /*
+    fps_wma = malloc(sizeof(*fps_wma)* WMA_SIZE);
+    memset(fps_wma, 0, sizeof(*fps_wma) * WMA_SIZE);
+    fps_wmai = 0;
+    */
+    
     while(!(WaitForSingleObject(vsyncevent, timeout) >> 9))
     {
         if(canrender && !isrender)
@@ -2974,6 +3031,22 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 
                 if(localnode.start < toptick)
                     AddVtx(localnode, currtick, tickscale);
+                
+                #ifdef KEYBOARD
+                if(localnode.start <= currtick)
+                {
+                    NoteNode* lmn = &KeyNotes[(BYTE)localnode.uid];
+                    
+                    if(lmn->uid != localnode.uid)
+                    {
+                        lmn->uid = localnode.uid;
+                        lmn->start = 14000000;
+                        //lmn->start = 21000000;
+                    }
+                    else if(lmn->start < 10000000)
+                        lmn->start = 10000000;
+                }
+                #endif
             }
             else
             {
@@ -3331,6 +3404,13 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         else
             timeout = 30;
         #endif
+        
+        /*
+        fps_wma[fps_wmai] = currtime - prevtime;
+        if(++fps_wmai == WMA_SIZE)
+            fps_wmai = 0;
+        */
+        
         prevtime = currtime;
         
         #ifdef TIMI_CAPTURE

@@ -22,7 +22,7 @@ extern DWORD (WINAPI*mGetModuleBaseNameA)
 
 //#define CUSTOMTITLE L"PFA mode"
 //#define CUSTOMTITLE L"render"
-#define CUSTOMTITLE L"no antispam"
+//#define CUSTOMTITLE L"no antispam"
 //#define TRIPLEO
 //#define NOBUF
 //#define FULLSCREEN
