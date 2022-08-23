@@ -26,6 +26,7 @@ extern DWORD (WINAPI*mGetModuleBaseNameA)
 //#define TRIPLEO
 //#define NOBUF
 //#define FULLSCREEN
+//#define MIDI_MMIO
 // TIMI_TIEMR was moved to render.c
 
 #include "exch.h"
@@ -89,7 +90,7 @@ static HGLRC CreateGLContext(HWND wnd, HDC dc)
     ZeroMemory(&pfd, sizeof(pfd));
     pfd.nSize = sizeof(pfd);
     pfd.nVersion = 1;
-    pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER | PFD_SUPPORT_COMPOSITION | PFD_SWAP_EXCHANGE;
+    pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER | PFD_SUPPORT_COMPOSITION;// | PFD_SWAP_EXCHANGE;
     pfd.iPixelType = PFD_TYPE_RGBA;
     pfd.cColorBits = 32;
     pfd.cRedBits = 8;
@@ -149,9 +150,19 @@ static HGLRC CreateGLContext(HWND wnd, HDC dc)
                 WGL_GREEN_BITS_EXT, 8,
                 WGL_BLUE_BITS_EXT, 8,
                 WGL_ALPHA_BITS_EXT, 8,*/
-                WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_FLOAT_ARB,
+                //WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_FLOAT_ARB,
                 //WGL_DEPTH_BITS_EXT, 16,
+                //WGL_DOUBLE_BUFFER_EXT, GL_TRUE,
+                
+                WGL_ACCELERATION_ARB, WGL_FULL_ACCELERATION_ARB,
+                WGL_DRAW_TO_WINDOW_EXT, GL_TRUE,
+                WGL_RED_BITS_EXT, 8,
+                WGL_GREEN_BITS_EXT, 8,
+                WGL_BLUE_BITS_EXT, 8,
+                WGL_ALPHA_BITS_EXT, 8,
+                WGL_DEPTH_BITS_EXT, 16,
                 WGL_DOUBLE_BUFFER_EXT, GL_TRUE,
+                
                 0, 0
             };
             UINT succ = 0;
@@ -230,7 +241,7 @@ static HGLRC CreateGLContext(HWND wnd, HDC dc)
         int attrs[] =
         {
             WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-            WGL_CONTEXT_MINOR_VERSION_ARB, 3,
+            WGL_CONTEXT_MINOR_VERSION_ARB, 0,
             0, 0
         };
         HGLRC ct = glCreateContextAttribsARB(dc, 0, attrs);
@@ -447,6 +458,10 @@ static int dwNoMessage(DWORD dwParam1)
 
 QWORD midisize;
 
+#ifdef MIDI_MMIO
+static HANDLE filemap = 0;
+#endif
+
 static MMPlayer* CreatePlayer(LPCWCH testpath)
 {
     OPENFILENAME_NT4W ofd;
@@ -478,7 +493,13 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
     printf("%S\n", testpath);
     
     HANDLE f = CreateFileW(testpath, GENERIC_READ, 0, NULL, OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+            FILE_ATTRIBUTE_NORMAL |
+    #ifdef MIDI_MMIO
+            FILE_FLAG_RANDOM_ACCESS
+    #else
+            FILE_FLAG_SEQUENTIAL_SCAN
+    #endif
+            , NULL);
     if(!f)
     {
         puts("File open fail");
@@ -516,6 +537,19 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
     }
     
     midisize = fs.QuadPart;
+    
+    #ifdef MIDI_MMIO
+    filemap = CreateFileMappingA(f, NULL, PAGE_READONLY, 0, 0, NULL);
+    if(!filemap)
+    {
+        CloseHandle(f);
+        puts("mmap failed");
+        return 0;
+    }
+    
+    BYTE* ptr = MapViewOfFile(filemap, FILE_MAP_COPY, 0, 0, 0);
+    BYTE* dstptr = ptr + fs.QuadPart;
+    #else
     
     BYTE* ptr = malloc(
     #ifndef _WIN64
@@ -562,6 +596,7 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
     }
     
     CloseHandle(f);
+    #endif
     
     BYTE* ptrend = dstptr;
     
@@ -706,7 +741,10 @@ int main(int argc, char** argv)
     if(!ks)
     {
         puts("Can't load OmniMIDI");
-        return 1;
+        
+        ks = LoadLibraryA("C:\\Data\\lolol\\Sono.SynthRender\\syn\\out\\syndrv.dll.dll");
+        if(!ks)
+            return 1;
     }
     
     void(WINAPI*KDLayers)(DWORD) = (void*)GetProcAddress(ks, "syninit_SetLayersKDM");

@@ -22,12 +22,12 @@
 //#define O3COLOR
 #define OUTLINE
 #define KEYBOARD
-//#define TRIPPY
+#define TRIPPY
 //#define WIDEMIDI
 //#define TIMI_TIEMR
 //#define ROTAT
 #define GLOW
-//#define SHTIME
+#define SHTIME
 //#define WOBBLE
 //#define WOBBLE_INTERP
 //#define GLOWEDGE
@@ -35,33 +35,38 @@
 #define TEXTNPS
 #define SHNPS
 //#define SHWOBBLE
-//#define HDR
+#define HDR
 //#define NOKEYBOARD
-//#define TIMI_CAPTURE
-//#define TIMI_NOCAPTURE
+#define TIMI_CAPTURE
+#define TIMI_NOCAPTURE
 //#define TIMI_IMPRECISE
 //#define TIMI_SILENT
-//#define TIMI_NOWAIT
+#define TIMI_NOWAIT
 //#define TIMI_CUSTOMSCROLL
-//#define FASTHDR
+#define FASTHDR
 //#define TEXTALLOC
 #define TEXTNEAT
+#define TEXTCUSTOM1
 #define TEXTTRANS
-#define GRACE
+//#define GRACE
 //#define DEBUGTEXT
-#define OLDDENSE
+//#define EXTREMEDEBUG
+//#define OLDDENSE
 //#define NOISEOVERLAY
-#define BUGFIXTEST
+//#define BUGFIXTEST
 //#define NORENDEROPT
+
+#define WMA_SIZE 16
+//#define WMA_SIZE 3
 
 //#define CUSTOMTICK player->timediv >> 3
 #define CUSTOMTICK player->timediv
 
-#define CAPW 720
-#define CAPH 480
+#define CAPW 1920
+#define CAPH 1080
 
-//#define BLITMODE GL_NEAREST
-#define BLITMODE GL_LINEAR
+#define BLITMODE GL_NEAREST
+//#define BLITMODE GL_LINEAR
 
 
 #ifdef PIANOKEYS
@@ -1131,11 +1136,10 @@ __attribute__((noinline)) static void FlushToilet()
 {
     if(vtxidx)
     {
-        //glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(*quads),     0, GL_STREAM_DRAW);
         #ifdef GLTEXT
         drawnotesraw += vtxidx;
         #endif
-        glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(*quads), quads, GL_STREAM_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, vtxidx * sizeof(*quads), quads);
         glDrawElements(GL_TRIANGLES, vtxidx * NOTEVTX, GL_UNSIGNED_INT, 0);
         vtxidx = 0;
     }
@@ -1974,12 +1978,10 @@ static void DrawFontString(int32_t x, int32_t y, int32_t scale, DWORD color, con
 
 static DWORD notetimer = 0;
 
-/*
-#define WMA_SIZE 16
-
+#ifdef WMA_SIZE
 ULONGLONG* fps_wma;
 DWORD fps_wmai;
-*/
+#endif
 
 static void DrawFontOverlay()
 {
@@ -2027,20 +2029,35 @@ static void DrawFontOverlay()
     const int32_t ybase = 70;
     #endif
     
+    #ifndef TEXTCUSTOM1
+        #define TEXTL -textlen
+        #define TEXTR -textlen
+        #define TEXTU 10
+        #define TEXTD -7
+        #define TEXTROFFS(offs) -textlen
+    #else
+        #define TEXTL -128
+        #define TEXTR 128-textlen-textlen
+        #define TEXTU 70
+        #define TEXTD 70
+        #define TEXTROFFS(offs) (TEXTR - offs)
+    #endif
+    
     #ifdef TEXTNPS
     textlen = sprintf(buf, "%llu N/s ", currnps);
-    DrawFontString(-textlen, ybase - 2, 2, -1, buf);
+    DrawFontString(TEXTROFFS(2), ybase - 2, 2, -1, buf);
+    #endif
+    
+    #ifndef TEXTCUSTOM1
+    textlen = sprintf(buf, "%llu NoS ", drawnotes);
+    DrawFontString(TEXTROFFS(2), ybase - /*0*/ 4, 2, -1, buf);
     #endif
     
     
-    textlen = sprintf(buf, " %llu quads", drawnotes);
-    DrawFontString(-textlen, ybase - /*0*/ 4, 2, -1, buf);
-    
-    
     textlen = sprintf(buf, " %llu notes", notecounter);
-    DrawFontString(-textlen, ybase - 0, 2, -1, buf);
+    DrawFontString(TEXTR, ybase - 0, 2, -1, buf);
     
-    /*
+    #ifdef WMA_SIZE
     ULONGLONG wma = 0;
     for(DWORD i = 0; i != WMA_SIZE; i++)
     {
@@ -2049,9 +2066,17 @@ static void DrawFontOverlay()
     
     double wmad = wma / (double)WMA_SIZE;
     
-    textlen = sprintf(buf, "%f FPS", 1e7 / wmad);
-    DrawFontString(-textlen, ybase - 6, 2, -1, buf);
-    */
+    {
+        #ifndef TEXTCUSTOM1
+            int32_t ty = ybase - 6;
+        #else
+            int32_t ty = ybase - 0;
+        #endif
+        
+        textlen = sprintf(buf, "%.2f FPS", 1e7 / wmad);
+        DrawFontString(TEXTL, ty, 2, -1, buf);
+    }
+    #endif
     
     #ifdef TEXTALLOC
     if(notealloccount != currnotealloc)
@@ -2079,16 +2104,21 @@ static void DrawFontOverlay()
         else
             notetimer = 0;
         
+        #undef TEXTL
+        #undef TEXTR
+        #undef TEXTU
+        #undef TEXTD
+        
         #ifndef TEXTNEAT
-        #define TEXTL -textlen
-        #define TEXTR -textlen
-        #define TEXTU 10
-        #define TEXTD -7
+            #define TEXTL -textlen
+            #define TEXTR -textlen
+            #define TEXTU 10
+            #define TEXTD -7
         #else
-        #define TEXTL -128
-        #define TEXTR 128-textlen-textlen
-        #define TEXTU 70
-        #define TEXTD 70
+            #define TEXTL -128
+            #define TEXTR 128-textlen-textlen
+            #define TEXTU 70
+            #define TEXTD 70
         #endif
         
         textlen = 18;
@@ -2124,7 +2154,9 @@ static void DrawFontOverlay()
     textlen = sprintf(buf, "TPS:   %f", 1e6 * player->timediv / (double)player->tempo);
     DrawFontString(-128, -54, 2, -1, buf);
     
-    /*
+    
+    #ifdef EXTREMEDEBUG
+    
     int32_t debugbase = 60;
     int32_t notex = -126;
     
@@ -2192,7 +2224,6 @@ static void DrawFontOverlay()
         if(note)
             DrawFontString(notex, debugbase - 2, 2, -1, "[...]");
     }
-    */
     
     /*
     sprintf(buf, "slp: %10i", player->_debug_sleeptime);
@@ -2200,12 +2231,16 @@ static void DrawFontOverlay()
     sprintf(buf, "lag: %10i", player->_debug_deltasleep);
     DrawFontString(-126, 68, 2, -1, buf);
     */
+    
+    #endif
+    
     #endif
     
     if(vtxidx)
     {
         //glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(struct textquad),     0, GL_STREAM_DRAW);
-        glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(struct textquad), quads, GL_STREAM_DRAW);
+        //glBufferData(GL_ARRAY_BUFFER, vtxidx * sizeof(struct textquad), quads, GL_STREAM_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, vtxidx * sizeof(struct textquad), quads);
         glDrawElements(GL_TRIANGLES, vtxidx * NOTEVTX, GL_UNSIGNED_INT, 0);
         
         vtxidx = 0;
@@ -2241,6 +2276,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     #if !defined(TIMI_CAPTURE) || defined(TIMI_NOWAIT)
     uglSwapControl(1);
+    if(!uglSwapControl(-1))
+    {
+        puts("Adaptive VSync is not available");
+        uglSwapControl(1);
+    }
+    //uglSwapControl(0);
     #else
     uglSwapControl(0);
     #endif
@@ -2624,7 +2665,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     GLuint g_ebo;
     glGenBuffers(1, &g_ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, vertexsize * NOTEVTX * sizeof(GLuint), indexes, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, vertexsize * NOTEVTX * sizeof(GLuint), 0, GL_STATIC_DRAW);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, vertexsize * NOTEVTX * sizeof(GLuint), indexes);
     free(indexes);
     indexes = 0;
     
@@ -2761,11 +2803,11 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     FPS_capture = TRUE;
     #endif
     
-    /*
+    #ifdef WMA_SIZE
     fps_wma = malloc(sizeof(*fps_wma)* WMA_SIZE);
     memset(fps_wma, 0, sizeof(*fps_wma) * WMA_SIZE);
     fps_wmai = 0;
-    */
+    #endif
     
     while(!(WaitForSingleObject(vsyncevent, timeout) >> 9))
     {
@@ -2811,7 +2853,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             glBindVertexArray(g_vao);
         
         glBindBuffer(GL_ARRAY_BUFFER, g_vbo);
-        glBufferData(GL_ARRAY_BUFFER, datasize, 0, GL_STREAM_DRAW);
+        
+        //goto topkek;
         
         glEnableVertexAttribArray(attrVertex);
         glEnableVertexAttribArray(attrColor);
@@ -2883,7 +2926,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         }*/
         // ===[BAD IDEA NEVER UNCOMMENT THIS]===
         
-        /*#ifdef HDR
+        #if defined(HDR) && !defined(FASTHDR)
         #ifdef TRIPPY
         const float uc = 0.0F;
         const float kc = -1.5F;
@@ -2897,10 +2940,14 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         AddRawVtx(kc, 1, 300, 450, (KCOLOR){uc, uc, uc, 1});
         AddRawVtx(kc, 1, 450, 600, (KCOLOR){uc, uc, uc, 1});
         #else
+        #ifdef NOKEYBOARD
+        AddRawVtx(kc, 1.5, 0, 600, (KCOLOR){uc, uc, uc, 1});
+        #else
         AddRawVtx(kc, 1, 0, 600, (KCOLOR){uc, uc, uc, 1});
         #endif
         #endif
-        */
+        #endif
+        
         
         #if defined(HDR) && defined(TRIPPY)
         if(vtxidx)
@@ -3373,6 +3420,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         glDisableVertexAttribArray(attrVertex);
         glDisableVertexAttribArray(attrColor);
         
+    topkek:
+        
         #ifdef GLTEXT
         DrawFontOverlay();
         #endif
@@ -3381,8 +3430,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         //glFlush();
         
         #ifndef TIMI_CAPTURE
-        InvalidateRect(glwnd, 0, 0);
-        uglSwapBuffers(dc);
+        //InvalidateRect(glwnd, 0, 0);
+        //uglSwapBuffers(dc);
+        SwapBuffers(dc);
+        //glFinish();
         
         glViewport(erect.left, erect.top, erect.right - erect.left, erect.bottom - erect.top);
         #endif
@@ -3399,17 +3450,18 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         NtQuerySystemTime(&currtime);
         #if !defined(TIMI_CAPTURE) || defined(TIMI_NOWAIT) // || defined(TIMI_NOCAPTURE)
-        if((currtime - prevtime) >> 18)
+        if((currtime - prevtime) > 10000)
             timeout = 0;
         else
-            timeout = 30;
+            //timeout = 1;
+            timeout = 0;
         #endif
         
-        /*
+        #ifdef WMA_SIZE
         fps_wma[fps_wmai] = currtime - prevtime;
         if(++fps_wmai == WMA_SIZE)
             fps_wmai = 0;
-        */
+        #endif
         
         prevtime = currtime;
         
