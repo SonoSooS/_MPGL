@@ -712,7 +712,7 @@ int main(int argc, char** argv)
     puts("");
     
 #ifndef TRIPLEO
-    HMODULE ks = LoadLibraryA(".\\timiditydrv");
+    HMODULE ks = LoadLibraryA("timiditydrv.dll");
     if(ks)
     {
         if(!GetProcAddress(ks, "IsKDMAPIAvailable")

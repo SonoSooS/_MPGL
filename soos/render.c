@@ -22,28 +22,28 @@
 //#define O3COLOR
 #define OUTLINE
 #define KEYBOARD
-#define TRIPPY
+//#define TRIPPY
 //#define WIDEMIDI
 //#define TIMI_TIEMR
 //#define ROTAT
 #define GLOW
-#define SHTIME
+//#define SHTIME
 //#define WOBBLE
 //#define WOBBLE_INTERP
 //#define GLOWEDGE
 #define GLTEXT
 #define TEXTNPS
-#define SHNPS
+//#define SHNPS
 //#define SHWOBBLE
-#define HDR
+//#define HDR
 //#define NOKEYBOARD
-#define TIMI_CAPTURE
-#define TIMI_NOCAPTURE
+//#define TIMI_CAPTURE
+//#define TIMI_NOCAPTURE
 //#define TIMI_IMPRECISE
 //#define TIMI_SILENT
-#define TIMI_NOWAIT
+//#define TIMI_NOWAIT
 //#define TIMI_CUSTOMSCROLL
-#define FASTHDR
+//#define FASTHDR
 //#define TEXTALLOC
 #define TEXTNEAT
 #define TEXTCUSTOM1
@@ -53,7 +53,7 @@
 //#define EXTREMEDEBUG
 //#define OLDDENSE
 //#define NOISEOVERLAY
-//#define BUGFIXTEST
+#define BUGFIXTEST
 //#define NORENDEROPT
 
 #define WMA_SIZE 16
@@ -1280,7 +1280,7 @@ static int WINAPI dwEventCallback(DWORD note)
     if((BYTE)note >= 0xA0)
         return 0;
     
-    DWORD uid = (BYTE)(note >> 8) | (note & 0xF) << 8
+    DWORD uid = (BYTE)(note >> 8) | ((note & 0xF) << 8)
     #ifdef TRACKID
     | (ply->CurrentTrack->trackid << 12)
     #endif
@@ -1290,7 +1290,7 @@ static int WINAPI dwEventCallback(DWORD note)
     
     NoteNode* __restrict node = ActiveNoteList[uid];
     
-    if((note & 0x10) && (note >> 16) & 0xFF)
+    if((note & 0x10) && ((note >> 16) & 0xFF))
     {
         #ifndef BUGFIXTEST
         if(node)
@@ -1983,6 +1983,8 @@ ULONGLONG* fps_wma;
 DWORD fps_wmai;
 #endif
 
+static DWORD trackcount;
+
 static void DrawFontOverlay()
 {
     if(vtxidx)
@@ -2048,7 +2050,7 @@ static void DrawFontOverlay()
     DrawFontString(TEXTROFFS(2), ybase - 2, 2, -1, buf);
     #endif
     
-    #ifndef TEXTCUSTOM1
+    #if !defined(TEXTCUSTOM1) || 1
     textlen = sprintf(buf, "%llu NoS ", drawnotes);
     DrawFontString(TEXTROFFS(2), ybase - /*0*/ 4, 2, -1, buf);
     #endif
@@ -2162,22 +2164,23 @@ static void DrawFontOverlay()
     
     uint32_t nactivid = 0;
     NoteNode* note = ActiveNoteList[nactivid];
+    uint32_t nactivmax = trackcount - 1;
     
     do
     {
-        while(!note && nactivid < 0xFFF)
+        while(!note && nactivid < nactivmax)
             note = ActiveNoteList[++nactivid];
         
         if(note)
         {
-            sprintf(buf, "%8X %20llu %lli", note->uid, note->start, !~note->end ? -1LL : (note->end - note->start));
+            sprintf(buf, "%8X %20llu %lli", note->uid, note->start, (!~note->end) ? -1LL : (note->end - note->start));
             DrawFontString(notex, debugbase, 2, -1, buf);
             
             
             note = note->overlapped_voce;
             
         }
-        else
+        else if(nactivid >= nactivmax)
         {
             DrawFontString(notex, debugbase, 2, -1, "[end]");
             break;
@@ -2376,8 +2379,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     player = ((MMPlayer**)lpParameter)[1];
     
     midisize += 2 * sizeof(MMPlayer);
-    
-    DWORD trackcount = 0;
     
     do
     {
@@ -2873,7 +2874,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_ebo);
         
         #if defined(HDR) && defined(TRIPPY)
-        glUniform1f(attrNotemix, 1);
+        glUniform1f(attrNotemix, 0);
         #endif
         
         #ifdef GLTEXT
@@ -2928,8 +2929,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         #if defined(HDR) && !defined(FASTHDR)
         #ifdef TRIPPY
-        const float uc = 0.0F;
-        const float kc = -1.5F;
+        const float uc = 0.1F;
+        const float kc = -1.0F;
         #else
         const float uc = 0.0F;
         const float kc = -1.0F;
