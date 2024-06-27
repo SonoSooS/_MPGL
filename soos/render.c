@@ -22,20 +22,20 @@
 //#define O3COLOR
 #define OUTLINE
 #define KEYBOARD
-//#define TRIPPY
+#define TRIPPY
 //#define WIDEMIDI
 //#define TIMI_TIEMR
 //#define ROTAT
 #define GLOW
-//#define SHTIME
+#define SHTIME
 //#define WOBBLE
 //#define WOBBLE_INTERP
 //#define GLOWEDGE
 #define GLTEXT
 #define TEXTNPS
-//#define SHNPS
+#define SHNPS
 //#define SHWOBBLE
-//#define HDR
+#define HDR
 //#define NOKEYBOARD
 //#define TIMI_CAPTURE
 //#define TIMI_NOCAPTURE
@@ -267,7 +267,7 @@ static void CompileStandardShader()
     #else
         "   clamp((-rawpos.y - 0.865F) * 16.0F, 1.0F, 5.6F);\n"
     #endif
-        #if defined(HDR) && defined(TRIPPY)
+        #if 1 && defined(HDR) && defined(TRIPPY)
         "   pcolor = incolor;\n"
         #else
         "   pcolor = vec4(incolor.xyz * ill_a, incolor.w);\n"
@@ -317,9 +317,9 @@ static void CompileStandardShader()
     #endif
     #ifdef HDR
         "   npos = vtxpos.xy;\n"
-        #ifdef TRIPPY
+        #if 1 && defined(TRIPPY)
             #ifdef GLOW
-            "    illum = clamp(((-rawpos.y - 0.95F) * 32.0F), 0.0F, 5.6F);\n"
+            //"    illum = clamp(((-rawpos.y - 0.95F) * 32.0F), 0.0F, 5.6F);\n"
             #endif
         #endif
     #endif
@@ -524,7 +524,7 @@ vec3 rotat_yuv(vec3 col, float y, float uv, float rota)\
         #else
         "       vec2 posdiff = npos - vec2(((i - 128) / 64.0F) + 1.0F + (1.0F / 151.0F), -0.6F);\n"
         #endif
-        #ifndef TRIPPY
+        #if !defined(TRIPPY)
         //"       vec2 asposdif = posdiff;\n"
         "       vec2 asposdif = vec2(posdiff.x, posdiff.y * (9.0F / 16.0F));\n"
         "       float posdist = dot(asposdif, asposdif);\n"
@@ -540,14 +540,14 @@ vec3 rotat_yuv(vec3 col, float y, float uv, float rota)\
         #endif
         #if defined(TRIPPY)
         "   float notea = 1.0F - notemix;\n"
-        //"   float sosi = dot(lightcolor.xyz, pcolor.www) * 8.0F;\n"
-        "   float sosi = max(1.0F, illum);\n"
+        "   float sosi = dot(lightcolor.xyz, pcolor.www) * 8.0F;\n"
+        //"   float sosi = max(1.0F, illum);\n"
         "   outcolor = vec4("
                 //"(lightcolor.xyz * notemix) +"
                 "(pcolor.xyz * vec3(mix(sosi, 1.0F, notea)))"
                 " * (((("
-                        "pow(lightcolor.xyz, vec3(0.8F))"
-                        " * vec3(4.0F))"
+                        "pow(lightcolor.xyz, vec3(1.8F))"
+                        " * vec3(64.0F))"
                     " + vec3((1.0F / 64.0F))"
                     ") * vec3(notea)) + vec3(notemix))"
             ", outcolor.w);\n"
@@ -569,9 +569,10 @@ vec3 rotat_yuv(vec3 col, float y, float uv, float rota)\
         "   outcolor += lightcolor;\n"
         #endif
         #ifdef NOKEYBOARD
-            #if defined(ROTAT)
+            #if !defined(ROTAT)
             "   outcolor = vec4(mix(outcolor.xyz, lightcolor.xyz, clamp((-npos.y - 0.58F) * 32.0F, 0.0F, 1.0F)), outcolor.w);\n"
-            #elif !(defined(HDR) && defined(TRIPPY))
+            //#elif !(defined(HDR) && defined(TRIPPY))
+            #else
             "   vec2 corrpos = vec2(npos.x, npos.y * (9.0F / 16.0F));\n"
             "   outcolor = vec4(mix(outcolor.xyz, lightcolor.xyz, clamp((0.09F - dot(corrpos, corrpos)) * 32.0F, 0.0F, 1.0F)), outcolor.w);\n"
             #endif
@@ -1401,9 +1402,33 @@ static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float 
     #ifdef ROUNDEDGE
     //DWORD color = colortable[dwUID];
     //DWORD color1 = color; //(color & 0xFEFEFEFE) >> 1 | (1 << 31);
+    #ifdef PFAKEY
+        #ifndef HDR
+        KCOLOR color2 = ((color1 & 0xFEFEFEFE) >> 1) | (0xFF << 24);
+        #else
+        KCOLOR color2 = (KCOLOR){
+            color1.r * 0.5F,
+            color1.g * 0.5F,
+            color1.b * 0.5F,
+            1.0F
+        };
+        #endif
+    #else
+        KCOLOR color2 = color1;
+    #endif
+    #ifndef HDR
+    KCOLOR color3 = ((color1 & 0xFCFCFCFC) >> 2) | (0xFF << 24);
+    #else
+    KCOLOR color3 = (KCOLOR){
+        color1.r * 0.25F,
+        color1.g * 0.25F,
+        color1.b * 0.25F,
+        1.0F
+    };
+    #endif
     KCOLOR color = color1;
-    KCOLOR color2 = color1;
-    KCOLOR color3 = color;
+    //KCOLOR color2 = color1;
+    //KCOLOR color3 = color;
     
     float middx = offsx + ((offsr - offsx) * 0.75F);
     float middy = offsy + ((offst - offsy) * 0.75F);
@@ -1526,7 +1551,7 @@ static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float 
     #endif
 }
 #else
-static inline void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR color1)
+static void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR color1)
 {
      if(vtxidx == vertexsize)
     {
@@ -1541,9 +1566,34 @@ static inline void AddRawVtx(float offsy, float offst, float offsx, float offsr,
     #ifdef ROUNDEDGE
     //DWORD color = colortable[dwUID];
     //DWORD color1 = color; //(color & 0xFEFEFEFE) >> 1 | (1 << 31);
+    
+    #ifdef PFAKEY
+        #ifndef HDR
+        KCOLOR color2 = ((color1 & 0xFEFEFEFE) >> 1) | (0xFF << 24);
+        #else
+        KCOLOR color2 = (KCOLOR){
+            color1.r * 0.5F,
+            color1.g * 0.5F,
+            color1.b * 0.5F,
+            1.0F
+        };
+        #endif
+    #else
+        KCOLOR color2 = color1;
+    #endif
+    #ifndef HDR
+    KCOLOR color3 = ((color1 & 0xFCFCFCFC) >> 2) | (0xFF << 24);
+    #else
+    KCOLOR color3 = (KCOLOR){
+        color1.r * 0.25F,
+        color1.g * 0.25F,
+        color1.b * 0.25F,
+        1.0F
+    };
+    #endif
     KCOLOR color = color1;
-    KCOLOR color2 = color1;
-    KCOLOR color3 = color;
+    //KCOLOR color2 = color1;
+    //KCOLOR color3 = color;
     
     float middx = offsx + ((offsr - offsx) * 0.75F);
     float middy = offsy + ((offst - offsy) * 0.75F);
@@ -1901,6 +1951,8 @@ static inline KCOLOR LerpColor(KCOLOR color, KCOLOR def, float a)
 
 #endif
 
+static DWORD trackcount;
+
 #ifdef GLTEXT
 struct textquadpart
 {
@@ -1982,8 +2034,6 @@ static DWORD notetimer = 0;
 ULONGLONG* fps_wma;
 DWORD fps_wmai;
 #endif
-
-static DWORD trackcount;
 
 static void DrawFontOverlay()
 {
@@ -2804,7 +2854,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     FPS_capture = TRUE;
     #endif
     
-    #ifdef WMA_SIZE
+    #if defined(WMA_SIZE) && defined(GLTEXT)
     fps_wma = malloc(sizeof(*fps_wma)* WMA_SIZE);
     memset(fps_wma, 0, sizeof(*fps_wma) * WMA_SIZE);
     fps_wmai = 0;
@@ -2942,7 +2992,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         AddRawVtx(kc, 1, 450, 600, (KCOLOR){uc, uc, uc, 1});
         #else
         #ifdef NOKEYBOARD
-        AddRawVtx(kc, 1.5, 0, 600, (KCOLOR){uc, uc, uc, 1});
+        AddRawVtx(kc - 1.5, 1.5, 0, 600, (KCOLOR){uc, uc, uc, 1});
         #else
         AddRawVtx(kc, 1, 0, 600, (KCOLOR){uc, uc, uc, 1});
         #endif
@@ -2957,7 +3007,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         glUniform1f(attrNotemix, 1);
         #endif
         
-        #if defined(DEBUGTEXT) && defined(NOISEOVERLAY)
+        #if 0 && defined(DEBUGTEXT) && defined(NOISEOVERLAY)
         {
             LONGLONG asdtick = currtick - (currtick % player->timediv) - player->timediv - player->timediv;
             do
@@ -3210,6 +3260,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         //glUniform1f(attrNotemix, 1.0F / 64.0F);
         #endif
         
+        #if defined(PIANOBAR)
+        AddRawVtx(-1.02, -0.98, 0, 600, (KCOLOR){1.0, 0.0, 0.0, 1});
+        #endif
         
         ULONGLONG delta = 40000000;
         
@@ -3458,7 +3511,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             timeout = 0;
         #endif
         
-        #ifdef WMA_SIZE
+        #if defined(WMA_SIZE) && defined(GLTEXT)
         fps_wma[fps_wmai] = currtime - prevtime;
         if(++fps_wmai == WMA_SIZE)
             fps_wmai = 0;
