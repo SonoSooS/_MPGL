@@ -267,7 +267,7 @@ static void CompileStandardShader()
     #else
         "   clamp((-rawpos.y - 0.865F) * 16.0F, 1.0F, 5.6F);\n"
     #endif
-        #if 1 && defined(HDR) && defined(TRIPPY)
+        #if 0 && defined(HDR) && defined(TRIPPY)
         "   pcolor = incolor;\n"
         #else
         "   pcolor = vec4(incolor.xyz * ill_a, incolor.w);\n"
@@ -317,9 +317,9 @@ static void CompileStandardShader()
     #endif
     #ifdef HDR
         "   npos = vtxpos.xy;\n"
-        #if 1 && defined(TRIPPY)
+        #if 0 && defined(TRIPPY)
             #ifdef GLOW
-            //"    illum = clamp(((-rawpos.y - 0.95F) * 32.0F), 0.0F, 5.6F);\n"
+            "    illum = clamp(((-rawpos.y - 0.95F) * 32.0F), 0.0F, 5.6F);\n"
             #endif
         #endif
     #endif
@@ -539,15 +539,17 @@ vec3 rotat_yuv(vec3 col, float y, float uv, float rota)\
         "   }\n"
         #endif
         #if defined(TRIPPY)
-        "   float notea = 1.0F - notemix;\n"
-        "   float sosi = dot(lightcolor.xyz, pcolor.www) * 8.0F;\n"
+        "   float notea = 1.0F;// - notemix;\n"
+        "   float sosi = dot(lightcolor.xyz, pcolor.www) * 16.0F;\n"
         //"   float sosi = max(1.0F, illum);\n"
+        //"   sosi = clamp(sosi, 0.08F, 2.4F);\n"
+        "   sosi = clamp(sosi, 0.08F, 1.0F);\n"
         "   outcolor = vec4("
                 //"(lightcolor.xyz * notemix) +"
                 "(pcolor.xyz * vec3(mix(sosi, 1.0F, notea)))"
                 " * (((("
                         "pow(lightcolor.xyz, vec3(1.8F))"
-                        " * vec3(64.0F))"
+                        " * vec3(32.0F))"
                     " + vec3((1.0F / 64.0F))"
                     ") * vec3(notea)) + vec3(notemix))"
             ", outcolor.w);\n"
@@ -3007,7 +3009,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         glUniform1f(attrNotemix, 1);
         #endif
         
-        #if 0 && defined(DEBUGTEXT) && defined(NOISEOVERLAY)
+        #if 1 && defined(DEBUGTEXT) && defined(NOISEOVERLAY)
         {
             LONGLONG asdtick = currtick - (currtick % player->timediv) - player->timediv - player->timediv;
             do
