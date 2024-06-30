@@ -5,68 +5,14 @@
 #include <string.h>
 #include <malloc.h>
 
+#include "config.h"
+
 #include "GL/ctor.h"
 #include "GL/core.h"
 #include "GL/utility.h"
 
 #include "player/mmplayer.h"
 
-
-#define TRACKID
-#define PFACOLOR
-#define PFAKEY
-//#define ROUNDEDGE
-//#define TRANSFORM
-#define PIANOKEYS
-//#define DYNASCROLL
-//#define O3COLOR
-#define OUTLINE
-#define KEYBOARD
-#define TRIPPY
-//#define WIDEMIDI
-//#define TIMI_TIEMR
-//#define ROTAT
-#define GLOW
-#define SHTIME
-//#define WOBBLE
-//#define WOBBLE_INTERP
-//#define GLOWEDGE
-#define GLTEXT
-#define TEXTNPS
-#define SHNPS
-//#define SHWOBBLE
-#define HDR
-//#define NOKEYBOARD
-//#define TIMI_CAPTURE
-//#define TIMI_NOCAPTURE
-//#define TIMI_IMPRECISE
-//#define TIMI_SILENT
-//#define TIMI_NOWAIT
-//#define TIMI_CUSTOMSCROLL
-//#define FASTHDR
-//#define TEXTALLOC
-#define TEXTNEAT
-#define TEXTCUSTOM1
-#define TEXTTRANS
-//#define GRACE
-//#define DEBUGTEXT
-//#define EXTREMEDEBUG
-//#define OLDDENSE
-//#define NOISEOVERLAY
-#define BUGFIXTEST
-//#define NORENDEROPT
-
-#define WMA_SIZE 16
-//#define WMA_SIZE 3
-
-//#define CUSTOMTICK player->timediv >> 3
-#define CUSTOMTICK player->timediv
-
-#define CAPW 1920
-#define CAPH 1080
-
-#define BLITMODE GL_NEAREST
-//#define BLITMODE GL_LINEAR
 
 
 #ifdef PIANOKEYS

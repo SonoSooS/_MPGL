@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "config.h"
+
 #include "GL/ctor.h"
 #include "GL/core.h"
 #include "GL/utility.h"
@@ -20,14 +22,6 @@ extern DWORD (WINAPI*mGetModuleBaseNameA)
     DWORD   nSize
 );
 
-//#define CUSTOMTITLE L"PFA mode"
-//#define CUSTOMTITLE L"render"
-//#define CUSTOMTITLE L"no antispam"
-//#define TRIPLEO
-//#define NOBUF
-//#define FULLSCREEN
-//#define MIDI_MMIO
-// TIMI_TIEMR was moved to render.c
 
 #include "exch.h"
 
