@@ -50,7 +50,7 @@
 //#define GRACE
 //#define DEBUGTEXT
 //#define EXTREMEDEBUG
-//#define OLDDENSE
+#define OLDDENSE
 //#define NOISEOVERLAY
 #define BUGFIXTEST
 //#define NORENDEROPT
@@ -66,3 +66,14 @@
 
 #define BLITMODE GL_NEAREST
 //#define BLITMODE GL_LINEAR
+
+
+
+#ifdef ROUNDEDGE
+#define NOTEVTX 36
+#define QUADCOUNT 9
+#else
+#define NOTEVTX 6
+#define QUADCOUNT 4
+#endif
+
