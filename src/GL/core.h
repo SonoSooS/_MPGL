@@ -1,6 +1,6 @@
 #ifndef GLDEFINE
 #include <GL/glcorearb.h>
-#define GLDEFINE(proc, name) GLAPI proc name ;
+#define GLDEFINE(proc, name) extern GLAPI proc name ;
 #endif
 
 GLDEFINE(PFNGLCULLFACEPROC, glCullFace)
