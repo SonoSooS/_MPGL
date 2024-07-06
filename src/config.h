@@ -21,7 +21,7 @@
 //#define O3COLOR
 #define OUTLINE
 #define KEYBOARD
-#define TRIPPY
+//#define TRIPPY
 //#define WIDEMIDI
 //#define TIMI_TIEMR
 //#define ROTAT
@@ -34,7 +34,7 @@
 #define TEXTNPS
 #define SHNPS
 //#define SHWOBBLE
-#define HDR
+//#define HDR
 //#define NOKEYBOARD
 //#define TIMI_CAPTURE
 //#define TIMI_NOCAPTURE
