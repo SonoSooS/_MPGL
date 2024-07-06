@@ -61,52 +61,20 @@ static HGLRC CreateGLContext(HWND wnd, HDC dc)
         return 0;
     }
     
-    PIXELFORMATDESCRIPTOR pfd;/* =
-    {
-    	sizeof(PIXELFORMATDESCRIPTOR),
-    	1,
-    	PFD_DRAW_TO_WINDOW |
-        PFD_SUPPORT_OPENGL |
-        PFD_SUPPORT_COMPOSITION, // Flags
-    	PFD_TYPE_RGBA,        // The kind of framebuffer. RGBA or palette.
-    	32,                   // Colordepth of the framebuffer.
-    	0, 0, 0, 0, 0, 0,
-        8, 0,
-    	0, 0, 0, 0, 0,
-    	16,                   // Number of bits for the depthbuffer
-    	16,                    // Number of bits for the stencilbuffer
-    	2,                    // Number of Aux buffers in the framebuffer.
-    	PFD_MAIN_PLANE,
-    	0,
-    	0, 0, 0
-    };*/
+    PIXELFORMATDESCRIPTOR pfd;
     
     ZeroMemory(&pfd, sizeof(pfd));
     pfd.nSize = sizeof(pfd);
     pfd.nVersion = 1;
-    pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER | PFD_SUPPORT_COMPOSITION;// | PFD_SWAP_EXCHANGE;
+    pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER | PFD_SUPPORT_COMPOSITION | PFD_SWAP_EXCHANGE;
     pfd.iPixelType = PFD_TYPE_RGBA;
     pfd.cColorBits = 32;
-    pfd.cRedBits = 8;
-    pfd.cRedShift = 16;
-    pfd.cGreenBits = 8;
-    pfd.cGreenShift = 8;
-    pfd.cBlueBits = 8;
-    pfd.cBlueShift = 0;
-    pfd.cAlphaBits = 8;
-    pfd.cAlphaShift = 24;
-    pfd.cAccumBits = 64;
-    pfd.cAccumRedBits = 16;
-    pfd.cAccumGreenBits = 16;
-    pfd.cAccumBlueBits = 16;
-    pfd.cAccumAlphaBits = 16;
     pfd.cDepthBits = 24;
-    pfd.cStencilBits = 16;
+    pfd.cStencilBits = 8;
     pfd.cAuxBuffers = 4;
     pfd.iLayerType = PFD_MAIN_PLANE;
     
     int pixfmt = ChoosePixelFormat(wdc, &pfd);
-    int pixfmt2 = -1;
     
     if(!pixfmt)
         puts("LWJGLException: Pixel format not accelerated");
@@ -126,99 +94,10 @@ static HGLRC CreateGLContext(HWND wnd, HDC dc)
     
     GL_LinkFunctions();
     
-    if(uglSupportsExt("WGL_ARB_pixel_format"))
-    {
-        puts("Has WGL_ARB_pixel_format");
-        
-        BOOL(WINAPI*wglChoosePixelFormat)(HDC hdc, const int *piAttribIList, const FLOAT *pfAttribFList, UINT nMaxFormats, int *piFormats, UINT *nNumFormats) = (void*)GL_GetProcAddress("wglChoosePixelFormatARB");
-        BOOL(WINAPI*wglGetPixelFormatAttribivARB)(HDC hdc, int iPixelFormat, int iLayerType, int nAttributes, const int* piAttributes, int* piValues) = (void*)GL_GetProcAddress("wglGetPixelFormatAttribivARB");
-        if(wglChoosePixelFormat && wglGetPixelFormatAttribivARB)
-        {
-            puts("Trying wglChoosePixelFormatARB");
-            
-            int params[] =
-            {
-                //WGL_ACCELERATION_ARB, WGL_FULL_ACCELERATION_EXT,
-                //WGL_DRAW_TO_WINDOW_EXT, GL_TRUE,
-                /*WGL_RED_BITS_EXT, 8,
-                WGL_GREEN_BITS_EXT, 8,
-                WGL_BLUE_BITS_EXT, 8,
-                WGL_ALPHA_BITS_EXT, 8,*/
-                //WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_FLOAT_ARB,
-                //WGL_DEPTH_BITS_EXT, 16,
-                //WGL_DOUBLE_BUFFER_EXT, GL_TRUE,
-                
-                WGL_ACCELERATION_ARB, WGL_FULL_ACCELERATION_ARB,
-                WGL_DRAW_TO_WINDOW_EXT, GL_TRUE,
-                WGL_RED_BITS_EXT, 8,
-                WGL_GREEN_BITS_EXT, 8,
-                WGL_BLUE_BITS_EXT, 8,
-                WGL_ALPHA_BITS_EXT, 8,
-                WGL_DEPTH_BITS_EXT, 16,
-                WGL_DOUBLE_BUFFER_EXT, GL_TRUE,
-                
-                0, 0
-            };
-            UINT succ = 0;
-            if(wglChoosePixelFormat(wdc, params, 0, 1, &pixfmt2, &succ) && succ && pixfmt)
-            {
-                printf("Found new pixel format, replacing %i with %i\n", pixfmt, pixfmt2);
-                
-                int origfmt = pixfmt;
-                pixfmt = pixfmt2;
-                pixfmt2 = origfmt;
-                
-                /*
-                int paramin[] =
-                {
-                    WGL_ACCELERATION_EXT,
-                    WGL_RED_BITS_EXT,
-                    WGL_GREEN_BITS_EXT,
-                    WGL_BLUE_BITS_EXT,
-                    WGL_ALPHA_BITS_EXT,
-                    WGL_COLOR_BITS_EXT,
-                    WGL_DEPTH_BITS_EXT,
-                    WGL_STENCIL_BITS_EXT,
-                    WGL_SAMPLE_BUFFERS_ARB,
-                    WGL_SAMPLES_ARB,
-                    WGL_ACCUM_RED_BITS_ARB,
-                    WGL_ACCUM_GREEN_BITS_ARB,
-                    WGL_ACCUM_BLUE_BITS_ARB,
-                    WGL_ACCUM_ALPHA_BITS_ARB,
-                    WGL_ACCUM_BITS_ARB,
-                    WGL_DOUBLE_BUFFER_ARB,
-                    WGL_STEREO_ARB,
-                    0
-                };
-                
-                int paramout[sizeof(paramin)/sizeof(*paramin)];
-                
-                if(wglGetPixelFormatAttribivARB(wdc, pixfmt2, 0, (sizeof(paramin)/sizeof(*paramin)) - 1, paramin, paramout))
-                {
-                    pixfmt = pixfmt2;
-                    
-                }
-                else puts("Failed to get pixel format attributes");*/
-            }
-            else puts("Failed to find a better pixel format");
-        }
-    }
-    
-    
-    
     if(!DescribePixelFormat(dc, pixfmt, sizeof(pfd), &pfd))
     {
         printf("Failed to describe PixelFormat %i\n", pixfmt);
-        
-        if(pixfmt2 != -1 && !DescribePixelFormat(dc, pixfmt2, sizeof(pfd), &pfd))
-        {
-            printf("Failed to describe fallback PixelFormat %i\n", pixfmt2);
-            goto ctxfail;
-        }
-        else
-        {
-            pixfmt = pixfmt2;
-        }
+        goto ctxfail;
     }
     
     if(!SetPixelFormat(dc, pixfmt, &pfd))
