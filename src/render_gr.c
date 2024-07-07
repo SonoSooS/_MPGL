@@ -10,20 +10,16 @@
 #include "render_gr.h"
 
 
-extern GLuint sh;
-extern GLint attrVertex, attrColor;
-#ifdef SHTIME
-extern GLint uniTime;
-#endif
-#ifdef HDR
-extern GLint uniLightAlpha;
-extern GLint uniLightColor;
-#ifdef TRIPPY
-extern GLint attrNotemix;
-#endif
-#endif
+GLuint shGrShader;
+GLint attrGrVertex;
+GLint attrGrColor;
+GLint attrGrNotemix;
+GLint uniGrLightAlpha;
+GLint uniGrLightColor;
+GLint uniGrTime;
 
-void grCompileStandardShader(void)
+
+void grInstallShader(void)
 {
     GLuint vsh = glCreateShader(GL_VERTEX_SHADER);
     GLuint psh = glCreateShader(GL_FRAGMENT_SHADER);
@@ -424,13 +420,15 @@ vec3 rotat_yuv(vec3 col, float y, float uv, float rota)\
     }
     #endif
     ;
+    
+    
     GLint stat = 0;
     
-    glShaderSource(vsh, 1, &shadera, 0);
+    glShaderSource(vsh, 1, &shadera, NULL);
     glCompileShader(vsh);
     glGetShaderiv(vsh, GL_COMPILE_STATUS, &stat);
-    //if(stat != 1)
-        grhPrintShaderInfo(vsh);
+    //if(stat != GL_TRUE)
+        grhPrintShaderInfoLog(vsh);
     
     #if defined(HDR) && !defined(GLOWEDGE) && !defined(ROUNDEDGE)
     #ifndef TIMI_CAPTURE
@@ -443,65 +441,46 @@ vec3 rotat_yuv(vec3 col, float y, float uv, float rota)\
         //"\n"
         ;
     }
-    glShaderSource(psh, 3, shaderb, 0);
+    glShaderSource(psh, 3, shaderb, NULL);
     #else
-    glShaderSource(psh, 1, &shaderb, 0);
+    glShaderSource(psh, 1, &shaderb, NULL);
     #endif
     glCompileShader(psh);
     glGetShaderiv(psh, GL_COMPILE_STATUS, &stat);
     //if(stat != 1)
-        grhPrintShaderInfo(psh);
+        grhPrintShaderInfoLog(psh);
     
-    sh = glCreateProgram();
+    shGrShader = glCreateProgram();
     
-    glAttachShader(sh, vsh);
-    glAttachShader(sh, psh);
+    glAttachShader(shGrShader, vsh);
+    glAttachShader(shGrShader, psh);
     
-    glLinkProgram(sh);
+    glLinkProgram(shGrShader);
     
-    glGetProgramiv(sh, GL_LINK_STATUS, &stat);
-    //if(stat != 1)
-    {
-        glGetProgramiv(sh, GL_INFO_LOG_LENGTH, &stat);
-        if(stat > 0)
-        {
-            char ilog[256];
-            GLsizei outloglen = 0;
-            glGetProgramInfoLog(sh, 256, &outloglen, ilog);
-            printf("%*.*s\n", outloglen, outloglen, ilog);
-        }
-        else
-        {
-            //puts("Unknown shader program error");
-        }
-        
-    }
+    glGetProgramiv(shGrShader, GL_LINK_STATUS, &stat);
+    //if(stat != GL_TRUE)
+        grhPrintProgramInfoLog(shGrShader);
     
-    attrVertex = glGetAttribLocation(sh, "inpos");
-    attrColor = glGetAttribLocation(sh, "incolor");
+    attrGrVertex = glGetAttribLocation(shGrShader, "inpos");
+    attrGrColor = glGetAttribLocation(shGrShader, "incolor");
     
-    if(attrVertex < 0)
+    if(attrGrVertex < 0)
         puts("inpos not found");
-    if(attrColor < 0)
+    if(attrGrColor < 0)
         puts("incolor not found");
     
-    while(attrVertex < 0 || attrColor < 0)
-        ;
+    if(attrGrVertex < 0 || attrGrColor < 0)
+        __builtin_trap();
     
-    #ifdef SHTIME
-    uniTime = glGetUniformLocation(sh, "intime");
-    #endif
+    uniGrTime = glGetUniformLocation(shGrShader, "intime");
     
-    #ifdef HDR
-    uniLightAlpha = glGetUniformLocation(sh, "lighta");
-    uniLightColor = glGetUniformLocation(sh, "lightc");
-        #ifdef TRIPPY
-        attrNotemix = glGetUniformLocation(sh, "notemix");
-        #endif
-    #endif
+    uniGrLightAlpha = glGetUniformLocation(shGrShader, "lighta");
+    uniGrLightColor = glGetUniformLocation(shGrShader, "lightc");
+    attrGrNotemix = glGetUniformLocation(shGrShader, "notemix");
     
-    glDetachShader(sh, psh);
-    glDetachShader(sh, vsh);
+    
+    glDetachShader(shGrShader, psh);
+    glDetachShader(shGrShader, vsh);
     
     glDeleteShader(vsh);
     glDeleteShader(psh);

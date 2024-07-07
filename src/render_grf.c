@@ -30,15 +30,13 @@ struct textquad
     struct textquadpart quads[4];
 };
 
-extern struct textquad* quads;
-extern size_t vtxidx;
+
 extern MMPlayer* player;
 
 extern ULONGLONG currnps;
 extern ULONGLONG drawnotesraw;
 extern ULONGLONG drawnotes;
 
-extern GLint attrVertex, attrColor;
 extern QWORD midisize;
 
 #ifdef TEXTNPS
@@ -53,19 +51,18 @@ extern DWORD fps_wmai;
 
 static DWORD notetimer = 0;
 
-GLuint texFont;
 
-#ifdef SHNPS
-GLint uniFontTime;
-GLint uniFontNPS;
-#endif
-GLint uniFontTex;
-GLint uniFontBg;
 
-GLuint fontsh;
-GLint attrFontColor;
-GLint attrFontVertex;
-GLint attrFontUV;
+GLuint shGrfFontShader;
+GLint attrGrfFontColor;
+GLint attrGrfFontVertex;
+GLint attrGrfFontUV;
+GLint uniGrfFontTime;
+GLint uniGrfFontNPS;
+GLint uniGrfFontTexi;
+GLint uniGrfFontBgColor;
+
+GLuint texGrfFont;
 
 
 void grfFontSetBg(DWORD color)
@@ -76,7 +73,7 @@ void grfFontSetBg(DWORD color)
     bgc[2] = (BYTE)(color >> 16) / 255.0F;
     bgc[3] = (BYTE)(color >> 24) / 255.0F;
     
-    glUniform4fv(uniFontBg, 1, (GLfloat*)bgc);
+    glUniform4fv(uniGrfFontBgColor, 1, (GLfloat*)bgc);
 }
 
 void grfDrawFontString(int32_t x, int32_t y, int32_t scale, DWORD color, const char* text)
@@ -149,20 +146,20 @@ void grfDrawFontOverlay(void)
     
     //glEnable(GL_TEXTURE_2D);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texFont);
-    glUseProgram(fontsh);
+    glBindTexture(GL_TEXTURE_2D, texGrfFont);
+    glUseProgram(shGrfFontShader);
     
-    glEnableVertexAttribArray(attrFontVertex);
-    glEnableVertexAttribArray(attrFontColor);
-    glEnableVertexAttribArray(attrFontUV);
+    glEnableVertexAttribArray(attrGrfFontVertex);
+    glEnableVertexAttribArray(attrGrfFontColor);
+    glEnableVertexAttribArray(attrGrfFontUV);
     
-    glVertexAttribPointer(attrFontVertex, 2, GL_FLOAT, GL_FALSE, 16, 0);
-    glVertexAttribPointer(attrFontColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16, (void*)8);
-    glVertexAttribPointer(attrFontUV, 2, GL_UNSIGNED_SHORT, GL_FALSE, 16, (void*)12);
+    glVertexAttribPointer(attrGrfFontVertex, 2, GL_FLOAT, GL_FALSE, 16, 0);
+    glVertexAttribPointer(attrGrfFontColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16, (void*)8);
+    glVertexAttribPointer(attrGrfFontUV, 2, GL_UNSIGNED_SHORT, GL_FALSE, 16, (void*)12);
     
     #ifdef SHNPS
-    glUniform1f(uniFontTime, (float)((double)(player->RealTime) / 1e7));
-    glUniform1f(uniFontNPS, (float)currnps);
+    glUniform1f(uniGrfFontTime, (float)((double)(player->RealTime) / 1e7));
+    glUniform1f(uniGrfFontNPS, (float)currnps);
     #endif
     
     grfFontSetBg(0xBF << 24);
@@ -394,9 +391,9 @@ void grfDrawFontOverlay(void)
         vtxidx = 0;
     }
     
-    glDisableVertexAttribArray(attrFontUV);
-    glDisableVertexAttribArray(attrFontColor);
-    glDisableVertexAttribArray(attrFontVertex);
+    glDisableVertexAttribArray(attrGrfFontUV);
+    glDisableVertexAttribArray(attrGrfFontColor);
+    glDisableVertexAttribArray(attrGrfFontVertex);
     
     glUseProgram(0);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -408,7 +405,7 @@ void grfDrawFontOverlay(void)
     #endif
 }
 
-void grfCompileFontShader(void)
+void grfInstallShader(void)
 {
     GLuint vsh = glCreateShader(GL_VERTEX_SHADER);
     GLuint psh = glCreateShader(GL_FRAGMENT_SHADER);
@@ -464,64 +461,49 @@ void grfCompileFontShader(void)
     glCompileShader(vsh);
     glGetShaderiv(vsh, GL_COMPILE_STATUS, &stat);
     //if(stat != 1)
-        grhPrintShaderInfo(vsh);
+        grhPrintShaderInfoLog(vsh);
     
     glShaderSource(psh, 1, &shaderb, 0);
     glCompileShader(psh);
     glGetShaderiv(psh, GL_COMPILE_STATUS, &stat);
     //if(stat != 1)
-        grhPrintShaderInfo(psh);
+        grhPrintShaderInfoLog(psh);
     
-    fontsh = glCreateProgram();
+    shGrfFontShader = glCreateProgram();
     
-    glAttachShader(fontsh, vsh);
-    glAttachShader(fontsh, psh);
+    glAttachShader(shGrfFontShader, vsh);
+    glAttachShader(shGrfFontShader, psh);
     
-    glLinkProgram(fontsh);
+    glLinkProgram(shGrfFontShader);
     
-    glGetProgramiv(fontsh, GL_LINK_STATUS, &stat);
+    glGetProgramiv(shGrfFontShader, GL_LINK_STATUS, &stat);
     //if(stat != 1)
-    {
-        glGetProgramiv(fontsh, GL_INFO_LOG_LENGTH, &stat);
-        if(stat > 0)
-        {
-            char ilog[256];
-            GLsizei outloglen = 0;
-            glGetProgramInfoLog(fontsh, 256, &outloglen, ilog);
-            printf("%*.*s\n", outloglen, outloglen, ilog);
-        }
-        else
-        {
-            //puts("Unknown shader program error");
-        }
-        
-    }
+        grhPrintProgramInfoLog(shGrfFontShader);
     
-    attrFontVertex = glGetAttribLocation(fontsh, "inpos");
-    attrFontColor = glGetAttribLocation(fontsh, "incolor");
-    attrFontUV = glGetAttribLocation(fontsh, "inuv");
+    attrGrfFontVertex = glGetAttribLocation(shGrfFontShader, "inpos");
+    attrGrfFontColor = glGetAttribLocation(shGrfFontShader, "incolor");
+    attrGrfFontUV = glGetAttribLocation(shGrfFontShader, "inuv");
     
-    if(attrFontVertex < 0)
+    if(attrGrfFontVertex < 0)
         puts("inpos not found");
-    if(attrFontColor < 0)
+    if(attrGrfFontColor < 0)
         puts("incolor not found");
-    if(attrFontUV < 0)
+    if(attrGrfFontUV < 0)
         puts("inuv not found");
     
-    while(attrVertex < 0 || attrColor < 0 || attrFontUV < 0)
-        ;
+    if(attrGrfFontVertex < 0 || attrGrfFontColor < 0 || attrGrfFontUV < 0)
+        __builtin_trap();
     
-    #ifdef SHNPS
-    uniFontTime = glGetUniformLocation(fontsh, "intime");
-    uniFontNPS = glGetUniformLocation(fontsh, "innps");
-    #endif
-    uniFontTex = glGetUniformLocation(fontsh, "fonTex");
-    uniFontBg = glGetUniformLocation(fontsh, "bgcolor");
+    
+    uniGrfFontTime = glGetUniformLocation(shGrfFontShader, "intime");
+    uniGrfFontNPS = glGetUniformLocation(shGrfFontShader, "innps");
+    uniGrfFontTexi = glGetUniformLocation(shGrfFontShader, "fonTex");
+    uniGrfFontBgColor = glGetUniformLocation(shGrfFontShader, "bgcolor");
     
     //glEnable(GL_TEXTURE_2D);
-    glGenTextures(1, &texFont);
+    glGenTextures(1, &texGrfFont);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texFont);
+    glBindTexture(GL_TEXTURE_2D, texGrfFont);
     
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -532,13 +514,13 @@ void grfCompileFontShader(void)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 128, 128, 0, GL_BGRA, GL_UNSIGNED_BYTE, fonttex);
     free(fonttex);
     
-    glUseProgram(fontsh);
-    glUniform1i(uniFontTex, 0);
+    glUseProgram(shGrfFontShader);
+    glUniform1i(uniGrfFontTexi, 0);
     #ifdef SHNPS
-    if(uniFontTime >= 0)
-        glUniform1f(uniFontTime, 0);
-    if(uniFontNPS >= 0)
-        glUniform1f(uniFontNPS, 0);
+    if(uniGrfFontTime >= 0)
+        glUniform1f(uniGrfFontTime, 0);
+    if(uniGrfFontNPS >= 0)
+        glUniform1f(uniGrfFontNPS, 0);
     #endif
     glUseProgram(0);
     
@@ -546,8 +528,8 @@ void grfCompileFontShader(void)
     //glActiveTexture(0);
     //glDisable(GL_TEXTURE_2D);
     
-    glDetachShader(fontsh, psh);
-    glDetachShader(fontsh, vsh);
+    glDetachShader(shGrfFontShader, psh);
+    glDetachShader(shGrfFontShader, vsh);
     
     glDeleteShader(vsh);
     glDeleteShader(psh);

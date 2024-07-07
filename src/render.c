@@ -13,6 +13,7 @@
 
 #include "player/mmplayer.h"
 
+#include "render.h"
 #include "render_grh.h"
 #include "render_gr.h"
 #include "render_grf.h"
@@ -48,12 +49,6 @@ const float minheight = (1.0F / 256.0F)
 
 #if defined(HDR) && !defined(FASTHDR)
 __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
-#endif
-
-#ifndef HDR
-typedef DWORD KCOLOR;
-#else
-typedef struct { float r, g, b, a; } KCOLOR;
 #endif
 
 #if defined(ROUNDEDGE) && !defined(DYNASCROLL)
@@ -104,39 +99,6 @@ extern BOOL canrender;
 
 extern HMODULE KSModule;
 
-GLuint sh;
-GLint attrVertex, attrColor;
-#ifdef SHTIME
-GLint uniTime;
-#endif
-#ifdef HDR
-GLint uniLightAlpha;
-GLint uniLightColor;
-#ifdef TRIPPY
-GLint attrNotemix;
-#endif
-#endif
-
-#ifndef HDR
-struct quadpart
-{
-    float x, y;
-    GLuint color;
-};
-#else
-struct quadpart
-{
-    float x, y;
-    KCOLOR color;
-};
-#endif
-
-struct quad
-{
-    struct quadpart quads[ QUADCOUNT ];
-};
-
-
 
 extern QWORD midisize;
 
@@ -173,6 +135,16 @@ typedef struct NoteNode
 
 MMPlayer* ply;
 MMPlayer* player;
+
+struct quad* quads;
+size_t vtxidx;
+const size_t vertexsize =
+#ifdef _M_IX86
+    1 << 12;
+#else
+    //1 << 18;
+    1 << 12;
+#endif
 
 /*
 main
@@ -223,16 +195,6 @@ static KCOLOR*   colortable;
 
 static QWORD notealloccount;
 static QWORD currnotealloc;
-
-struct quad* quads;
-size_t vtxidx;
-static const size_t 
-#ifdef _M_IX86
-    vertexsize = 1 << 12;
-#else
-    //vertexsize = 1 << 18;
-    vertexsize = 1 << 12;
-#endif
 
 
 //seems to work properly
@@ -1467,10 +1429,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     //UNUSED for now
     //trackcount >>= 12; // undo 16 * 256
     
-    grCompileStandardShader();
+    grInstallShader();
     
     #ifdef GLTEXT
-    grfCompileFontShader();
+    grfInstallShader();
     #endif
     
     quads = 0;
@@ -1828,24 +1790,24 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         //goto topkek;
         
-        glEnableVertexAttribArray(attrVertex);
-        glEnableVertexAttribArray(attrColor);
+        glEnableVertexAttribArray(attrGrVertex);
+        glEnableVertexAttribArray(attrGrColor);
         
-        glVertexAttribPointer(attrVertex, 2, GL_FLOAT, GL_FALSE, sizeof(struct quadpart), 0);
+        glVertexAttribPointer(attrGrVertex, 2, GL_FLOAT, GL_FALSE, sizeof(struct quadpart), 0);
         #ifndef HDR
-        glVertexAttribPointer(attrColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(struct quadpart), (void*)8);
+        glVertexAttribPointer(attrGrColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(struct quadpart), (void*)8);
         #else
         glVertexAttribPointer(attrColor, 4, GL_FLOAT, GL_FALSE, sizeof(struct quadpart), (void*)8);
         #endif
         
-        glUseProgram(sh);
+        glUseProgram(shGrShader);
         if(glBindVertexArray)
             glBindVertexArray(g_vao);
         glBindBuffer(GL_ARRAY_BUFFER, g_vbo);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_ebo);
         
         #if defined(HDR) && defined(TRIPPY)
-        glUniform1f(attrNotemix, 0);
+        glUniform1f(attrGrNotemix, 0);
         #endif
         
         #ifdef GLTEXT
@@ -1880,7 +1842,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #ifdef DYNASCROLL
         glUniform1f(uniTime, (float)(currtick / (double)tickheight * 0.25));
         #else
-        glUniform1f(uniTime, (float)((double)(player->RealTime) / 1e7));
+        glUniform1f(uniGrTime, (float)((double)(player->RealTime) / 1e7));
         #endif
         #endif
         
@@ -1925,7 +1887,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         if(vtxidx)
             FlushToilet();
         
-        glUniform1f(attrNotemix, 1);
+        glUniform1f(attrGrNotemix, 1);
         #endif
         
         #if 1 && defined(DEBUGTEXT) && defined(NOISEOVERLAY)
@@ -2177,7 +2139,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #ifdef KEYBOARD
         
         #if defined(HDR) && defined(TRIPPY)
-        glUniform1f(attrNotemix, 0);
+        glUniform1f(attrGrNotemix, 0);
         //glUniform1f(attrNotemix, 1.0F / 64.0F);
         #endif
         
@@ -2368,8 +2330,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         glUniform1fv(uniLightAlpha, 256, shalpha);
         glUniform4fv(uniLightColor, 256, (GLfloat*)shcolor);
         #else
-        glUniform1fv(uniLightAlpha, 128, shalpha);
-        glUniform4fv(uniLightColor, 128, (GLfloat*)shcolor);
+        glUniform1fv(uniGrLightAlpha, 128, shalpha);
+        glUniform4fv(uniGrLightColor, 128, (GLfloat*)shcolor);
         #endif
         #endif
         
@@ -2392,8 +2354,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         }
         #endif
         
-        glDisableVertexAttribArray(attrVertex);
-        glDisableVertexAttribArray(attrColor);
+        glDisableVertexAttribArray(attrGrVertex);
+        glDisableVertexAttribArray(attrGrColor);
         
     //topkek:
         
