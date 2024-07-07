@@ -1,5 +1,11 @@
 #pragma once
 
+struct histogram
+{
+    ULONGLONG delta;
+    ULONGLONG count;
+};
+
 
 extern GLuint shGrfFontShader;
 extern GLint attrGrfFontColor;

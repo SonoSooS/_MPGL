@@ -271,11 +271,7 @@ static void NoteSync(MMPlayer* syncplayer, DWORD dwDelta)
 
 #ifdef TEXTNPS
 
-struct histogram
-{
-    ULONGLONG delta;
-    ULONGLONG count;
-} *hist = 0;
+struct histogram *hist = 0;
 DWORD histlast = 0;
 DWORD histwrite = 0;
 ULONGLONG histsum = 0;
@@ -1208,7 +1204,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     wglMakeCurrent(dc, glctx);
 
     glEnable(GL_DEBUG_OUTPUT);
-    glDebugMessageCallbackARB(DebugCB, 0);
+    glDebugMessageCallbackARB(DebugCB, NULL);
     
     #if !defined(TIMI_CAPTURE) || defined(TIMI_NOWAIT)
     uglSwapControl(1);
@@ -1806,9 +1802,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         glBindBuffer(GL_ARRAY_BUFFER, g_vbo);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_ebo);
         
-        #if defined(HDR) && defined(TRIPPY)
-        glUniform1f(attrGrNotemix, 0);
-        #endif
+        BIND_IF(glUniform1f, attrGrNotemix, 0.0F);
         
         #ifdef GLTEXT
         drawnotesraw = 0;
@@ -1840,9 +1834,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         #ifdef SHTIME
         #ifdef DYNASCROLL
-        glUniform1f(uniTime, (float)(currtick / (double)tickheight * 0.25));
+        BIND_IF(glUniform1f, uniGrTime, (float)(currtick / (double)tickheight * 0.25));
         #else
-        glUniform1f(uniGrTime, (float)((double)(player->RealTime) / 1e7));
+        BIND_IF(glUniform1f, uniGrTime, (float)((double)(player->RealTime) / 1e7));
         #endif
         #endif
         
@@ -1883,12 +1877,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #endif
         
         
-        #if defined(HDR) && defined(TRIPPY)
         if(vtxidx)
             FlushToilet();
         
-        glUniform1f(attrGrNotemix, 1);
-        #endif
+        BIND_IF(glUniform1f, attrGrNotemix, 1.0F);
         
         #if 1 && defined(DEBUGTEXT) && defined(NOISEOVERLAY)
         {
@@ -2083,9 +2075,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #endif
         
         #ifdef DEBUGTEXT
-        #if defined(HDR) && defined(TRIPPY)
-        glUniform1f(attrNotemix, 0);
-        #endif
+        BIND_IF(glUniform1f, attrNotemix, 0.0F);
         
         LONGLONG debugtick = currtick - (currtick % player->timediv) - player->timediv - player->timediv;
         do
@@ -2139,8 +2129,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #ifdef KEYBOARD
         
         #if defined(HDR) && defined(TRIPPY)
-        glUniform1f(attrGrNotemix, 0);
-        //glUniform1f(attrNotemix, 1.0F / 64.0F);
+        BIND_IF(glUniform1f, attrGrNotemix, 0.0F);
+        //BIND_IF(glUniform1f, attrNotemix, 1.0F / 64.0F);
         #endif
         
         #if defined(PIANOBAR)
@@ -2327,11 +2317,11 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         #ifdef HDR
         #ifdef WIDEMIDI
-        glUniform1fv(uniLightAlpha, 256, shalpha);
-        glUniform4fv(uniLightColor, 256, (GLfloat*)shcolor);
+        BIND_IF(glUniform1fv, uniGrLightAlpha, 256, shalpha);
+        BIND_IF(glUniform4fv, uniGrLightColor, 256, (GLfloat*)shcolor);
         #else
-        glUniform1fv(uniGrLightAlpha, 128, shalpha);
-        glUniform4fv(uniGrLightColor, 128, (GLfloat*)shcolor);
+        BIND_IF(glUniform1fv, uniGrLightAlpha, 128, shalpha);
+        BIND_IF(glUniform4fv, uniGrLightColor, 128, (GLfloat*)shcolor);
         #endif
         #endif
         

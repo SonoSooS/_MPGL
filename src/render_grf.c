@@ -516,12 +516,9 @@ void grfInstallShader(void)
     
     glUseProgram(shGrfFontShader);
     glUniform1i(uniGrfFontTexi, 0);
-    #ifdef SHNPS
-    if(uniGrfFontTime >= 0)
-        glUniform1f(uniGrfFontTime, 0);
-    if(uniGrfFontNPS >= 0)
-        glUniform1f(uniGrfFontNPS, 0);
-    #endif
+    BIND_IF(glUniform1f, uniGrfFontTime, 0.0F);
+    BIND_IF(glUniform1f, uniGrfFontNPS, 0.0F);
+    
     glUseProgram(0);
     
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -535,9 +532,9 @@ void grfInstallShader(void)
     glDeleteShader(psh);
     
     #ifdef TEXTNPS
-    hist = malloc((DWORD)1e7 * 0x10);
-    ZeroMemory(hist, (DWORD)1e7 * 0x10);
-    midisize += (DWORD)1e7 * 0x10;
+    hist = malloc((DWORD)1e7 * sizeof(*hist));
+    ZeroMemory(hist, (DWORD)1e7 * sizeof(*hist));
+    midisize += (DWORD)1e7 * sizeof(*hist);
     notecounter = 0;
     #endif
 }
