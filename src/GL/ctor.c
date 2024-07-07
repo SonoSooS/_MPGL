@@ -16,7 +16,7 @@ DWORD (WINAPI*mGetModuleBaseNameA)
     void* retaddr = __builtin_return_address(0);
     printf("Call nullptr to %016llX\n", retaddr);
     fflush(stdout);
-    __builtin_unreachable();
+    __builtin_trap();
 }*/
 
 void* __attribute__((noinline)) GL_GetProcAddress(const char* name)
