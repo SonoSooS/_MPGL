@@ -1793,7 +1793,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #ifndef HDR
         glVertexAttribPointer(attrGrColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(struct quadpart), (void*)8);
         #else
-        glVertexAttribPointer(attrColor, 4, GL_FLOAT, GL_FALSE, sizeof(struct quadpart), (void*)8);
+        glVertexAttribPointer(attrGrColor, 4, GL_FLOAT, GL_FALSE, sizeof(struct quadpart), (void*)8);
         #endif
         
         glUseProgram(shGrShader);
