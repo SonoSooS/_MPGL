@@ -27,8 +27,8 @@ const DWORD keymul = 1;
 #endif
 
 #ifdef TIMI_CAPTURE
-const ULONGLONG FPS_DENIM = 25;//625*4;//28125;//3840;
-const ULONGLONG FPS_NOMIN = 1;//100;//130;
+const ULONGLONG FPS_DENIM = TIMI_FPS_DENIM;//625*4;//28125;//3840;
+const ULONGLONG FPS_NOMIN = TIMI_FPS_NOMIN;//100;//130;
 ULONGLONG FPS_frame = 0;
 volatile BOOL FPS_capture = FALSE;
 

@@ -61,6 +61,9 @@
 //#define CUSTOMTICK player->timediv >> 3
 #define CUSTOMTICK player->timediv
 
+#define TIMI_FPS_DENIM 60
+#define TIMI_FPS_NOMIN 1
+
 #define CAPW 1920
 #define CAPH 1080
 
