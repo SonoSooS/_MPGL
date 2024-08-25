@@ -7,7 +7,7 @@
 //#define NOBUF
 //#define FULLSCREEN
 //#define MIDI_MMIO
-
+//#define HEADLESS
 
 // ========[Renderer config]========
 

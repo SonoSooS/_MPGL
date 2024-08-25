@@ -42,6 +42,7 @@ HMODULE KSModule;
 static MMPlayer* realplayer;
 static ULONGLONG realsync = 0;
 
+#ifndef HEADLESS
 DWORD WINAPI RenderThread(PVOID lpParameter);
 
 static HGLRC CreateGLContext(HWND wnd, HDC dc)
@@ -319,6 +320,7 @@ static LRESULT CALLBACK WindowProc(HWND wnd, UINT uMsg, WPARAM wParam, LPARAM lP
     
     return DefWindowProcW(wnd, uMsg, wParam, lParam);
 }
+#endif
 
 #ifdef TRIPLEO
 
@@ -681,17 +683,6 @@ int main(int argc, char** argv)
         return 1;
     }
     
-    MMPlayer* renderplayer = mmpDuplicatePlayer(player);
-    if(!renderplayer)
-    {
-#ifndef TRIPLEO
-        FreeLibrary(ks);
-#endif
-        puts("Failed to create note catcher due to low memory");
-        
-        return 1;
-    }
-    
 #ifndef TRIPLEO
     do
     {
@@ -750,6 +741,18 @@ int main(int argc, char** argv)
 #else
     player->KShortMsg = dwNoMessage;
 #endif
+    
+#ifndef HEADLESS
+    MMPlayer* renderplayer = mmpDuplicatePlayer(player);
+    if(!renderplayer)
+    {
+#ifndef TRIPLEO
+        FreeLibrary(ks);
+#endif
+        puts("Failed to create note catcher due to low memory");
+        
+        return 1;
+    }
     
     erect.left = 0;
     erect.top = 0;
@@ -833,6 +836,14 @@ int main(int argc, char** argv)
     }
     
     puts("GetMessage loop broken");
+
+#else
+    CreateThread(0, 0x4000, PlayerThread, player, 0, 0);
+    while(player->tracks->ptrs)
+    {
+        Sleep(1);
+    }
+#endif
     
 #ifndef TRIPLEO
     do
