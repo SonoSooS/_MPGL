@@ -2075,7 +2075,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #endif
         
         #ifdef DEBUGTEXT
-        BIND_IF(glUniform1f, attrNotemix, 0.0F);
+        BIND_IF(glUniform1f, attrGrNotemix, 0.0F);
         
         LONGLONG debugtick = currtick - (currtick % player->timediv) - player->timediv - player->timediv;
         do
@@ -2130,7 +2130,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         #if defined(HDR) && defined(TRIPPY)
         BIND_IF(glUniform1f, attrGrNotemix, 0.0F);
-        //BIND_IF(glUniform1f, attrNotemix, 1.0F / 64.0F);
+        //BIND_IF(glUniform1f, attrGrNotemix, 1.0F / 64.0F);
         #endif
         
         #if defined(PIANOBAR)
