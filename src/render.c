@@ -113,7 +113,7 @@ ULONGLONG notecounter;
 ULONGLONG drawnotesraw = 0;
 ULONGLONG drawnotes = 0;
 
-void WINAPI DebugCB(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam)
+static void WINAPI DebugCB(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam)
 {
     if(type == GL_DEBUG_TYPE_ERROR)
     printf("GL ERROR %i | source = 0x%X, type = 0x%X, severity = 0x%X, message = %s\n",
@@ -1202,9 +1202,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     isrender = FALSE;
     
     wglMakeCurrent(dc, glctx);
-
-    glEnable(GL_DEBUG_OUTPUT);
-    glDebugMessageCallbackARB(DebugCB, NULL);
+    /*
+    if(glDebugMessageCallbackARB && !IsBadCodePtr(glDebugMessageCallbackARB))
+    {
+        glEnable(GL_DEBUG_OUTPUT);
+        glDebugMessageCallbackARB(DebugCB, NULL);
+    }*/
     
     #if !defined(TIMI_CAPTURE) || defined(TIMI_NOWAIT)
     uglSwapControl(1);
