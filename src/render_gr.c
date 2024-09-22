@@ -125,7 +125,7 @@ void grInstallShader(void)
     #endif
     #ifdef HDR
         "   npos = vtxpos.xy;\n"
-        #if 0 && defined(TRIPPY)
+        #if defined(TRIPPY)
             #ifdef GLOW
             "    illum = clamp(((-rawpos.y - 0.95F) * 32.0F), 0.0F, 5.6F);\n"
             #endif
@@ -348,12 +348,12 @@ vec3 rotat_yuv(vec3 col, float y, float uv, float rota)\
         #endif
         #if defined(TRIPPY)
         "   float notea = 1.0F;// - notemix;\n"
-        "   float sosi = dot(lightcolor.xyz, pcolor.www) * 16.0F;\n"
-        //"   float sosi = max(1.0F, illum);\n"
+        //"   float sosi = dot(lightcolor.xyz, pcolor.www) * 16.0F;\n"
+        "   float sosi = max(1.0F, illum);\n"
         //"   sosi = clamp(sosi, 0.08F, 2.4F);\n"
         "   sosi = clamp(sosi, 0.08F, 1.0F);\n"
         "   outcolor = vec4("
-                //"(lightcolor.xyz * notemix) +"
+                "(lightcolor.xyz * notemix) +"
                 "(pcolor.xyz * vec3(mix(sosi, 1.0F, notea)))"
                 " * (((("
                         "pow(lightcolor.xyz, vec3(1.8F))"
