@@ -1019,6 +1019,7 @@ static __attribute__((noinline)) void AddVtx(NoteNode localnode, ULONGLONG currt
     AddRawVtx(offsy, offst, offsx, offsr, &colortable[(localnode.uid >> 8) << 1]);
 }
 
+#ifdef DEBUGTEXT
 static __attribute__((noinline)) void AddWideVtx(ULONGLONG start, float height, ULONGLONG currtick, float tickscale, DWORD range, DWORD color)
 {
     #ifdef PIANOKEYS
@@ -1053,6 +1054,7 @@ static __attribute__((noinline)) void AddWideVtx(ULONGLONG start, float height, 
     
     AddRawVtx(offsy, offst, offsx, offsr, kc_send);
 }
+#endif
 
 #if defined(PFACOLOR)
 static __attribute__((noinline)) KCOLOR HSV2RGB(float hue, float saturation, float value)
