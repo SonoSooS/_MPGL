@@ -497,6 +497,11 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
     }
     
     WORD timediv = __builtin_bswap16(*(WORD*)(ptr + 0xA));
+    if(!timediv)
+    {
+        puts("Warning: zero track MIDI, treating as infinite");
+        --timediv;
+    }
     
     BYTE* buf = ptr + trkcnt + 8;
     trkcnt = 0;
@@ -759,7 +764,10 @@ int main(int argc, char** argv)
 #ifndef TRIPLEO
         FreeLibrary(ks);
 #endif
-        puts("Failed to create note catcher due to low memory");
+        if(!renderplayer || (renderplayer->tracks && renderplayer->tracks->ptrs))
+            puts("Failed to create note catcher due to low memory");
+        else
+            puts("Failed to create note catcher due to no tracks in the MIDI file");
         
         return 1;
     }
