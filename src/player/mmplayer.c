@@ -225,7 +225,10 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                         }
                         
                         if(player->KLongMsg)
+                        {
+                            msg.prm1 = meta;
                             player->KLongMsg(*(DWORD*)&msg, ptrs, metalen);
+                        }
                         
                         ptrs += metalen;
                         goto cmdend;

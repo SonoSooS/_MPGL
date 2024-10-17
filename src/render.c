@@ -103,6 +103,36 @@ extern HMODULE KSModule;
 extern QWORD midisize;
 
 
+static inline KCOLOR color_blacken1(KCOLOR color)
+{
+#ifndef HDR
+    return ((color & 0xFEFEFE) >> 1) | (color & 0xFF000000);
+#else
+    return (KCOLOR)
+    {
+        color.r * 0.5F,
+        color.g * 0.5F,
+        color.b * 0.5F,
+        color.a,
+    };
+#endif
+}
+
+static inline KCOLOR color_blacken2(KCOLOR color)
+{
+#ifndef HDR
+    return ((color & 0xFCFCFC) >> 2) | (color & 0xFF000000);
+#else
+    return (KCOLOR)
+    {
+        color.r * 0.25F,
+        color.g * 0.25F,
+        color.b * 0.25F,
+        color.a,
+    };
+#endif
+}
+
 #ifdef TEXTNPS
 struct histogram* hist;
 ULONGLONG notecounter;
@@ -383,32 +413,109 @@ __attribute__((noinline)) static void FlushToilet()
     }
 }
 
-static int WINAPI dwLongMsg(DWORD note, LPCVOID ptr, DWORD len)
+static int WINAPI dwLongMsg(DWORD dwMsg, LPCVOID ptr, DWORD len)
 {
-    if((BYTE)note != 0xF0 || !KSModule)
-        return 0;
     if(len > 256)
     {
         printf("LongMsg too long (%i), ignoring\n", len);
         return 1;
     }
     
-    BYTE buf[256];
-    buf[0] = 0xF0;
-    CopyMemory(buf + 1, ptr, len);
-    
-    int(WINAPI*KModMsg)(UINT,UINT,DWORD_PTR,DWORD_PTR,DWORD_PTR) = (void*)GetProcAddress(KSModule, "modMessage");
-    if(KModMsg)
+    if(KSModule && (BYTE)dwMsg == 0xF0)
     {
-        MIDIHDR hdr;
-        ZeroMemory(&hdr, sizeof(hdr));
-        hdr.dwFlags = MHDR_PREPARED;
-        hdr.dwBufferLength = len + 1;
-        hdr.dwBytesRecorded = len + 1;
-        hdr.lpData = (LPVOID)buf;
-        while(KModMsg(0, 8, 0, (DWORD_PTR)&hdr, sizeof(hdr)) == 67)
-            /* do nothing */;
+        BYTE buf[256];
+        buf[0] = 0xF0;
+        CopyMemory(buf + 1, ptr, len);
+        
+        int(WINAPI*KModMsg)(UINT,UINT,DWORD_PTR,DWORD_PTR,DWORD_PTR) = (void*)GetProcAddress(KSModule, "modMessage");
+        if(KModMsg)
+        {
+            MIDIHDR hdr;
+            ZeroMemory(&hdr, sizeof(hdr));
+            hdr.dwFlags = MHDR_PREPARED;
+            hdr.dwBufferLength = len + 1;
+            hdr.dwBytesRecorded = len + 1;
+            hdr.lpData = (LPVOID)buf;
+            while(KModMsg(0, 8, 0, (DWORD_PTR)&hdr, sizeof(hdr)) == 67)
+                /* do nothing */;
+        }
     }
+    
+    //printf("LongMsg: %8X %u\n", dwMsg, len);
+    
+    dwMsg &= 0xFFFF;
+    
+    if(((dwMsg == 0x7FFF) || (dwMsg == 0x0AFF)) && len >= 8) // undocumented color meta
+    {
+        LPBYTE data = (LPBYTE)ptr;
+        if(data[0] != 0x00 || data[1] != 0x0F) // extended meta
+            return 0;
+        
+        // Don't remember what data[3] does :(
+        
+        BYTE ch = data[2];
+        DWORD i, j;
+        
+        if(ch >= 16)
+        {
+            i = 0;
+            j = 16 * 2;
+        }
+        else
+        {
+            i = ch * 2;
+            j = i + 2;
+        }
+        
+        KCOLOR* colorbase = &colortable[player->CurrentTrack->trackid * (16 << 1)];
+        
+        KCOLOR color1, color2;
+        
+    #ifndef HDR
+        color1 = data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24);
+    #else
+        color1 = (KCOLOR)
+        {
+            data[4] * (1.0F / 255.0F),
+            data[5] * (1.0F / 255.0F),
+            data[6] * (1.0F / 255.0F),
+            data[7] * (1.0F / 255.0F),
+        };
+    #endif
+        
+        if(len >= 12)
+        {
+        #ifndef HDR 
+            color2 = data[8] | (data[9] << 8) | (data[10] << 16) | (data[11] << 24);
+        #else
+            color2 = (KCOLOR)
+            {
+                data[ 8] * (1.0F / 255.0F),
+                data[ 9] * (1.0F / 255.0F),
+                data[10] * (1.0F / 255.0F),
+                data[11] * (1.0F / 255.0F),
+            };
+        #endif
+        }
+        else
+        {
+        #ifdef PFAKEY
+            color2 = color_blacken1(color1);
+        #else
+            color2 = color1;
+        #endif
+        }
+        
+        do
+        {
+            colorbase[i+0] = color1;
+            colorbase[i+1] = color2;
+            
+            i += 2;
+        }
+        while(i < j);
+    }
+    
     
     return 0;
 }
@@ -499,7 +606,7 @@ static void FPS_SyncFunc(MMPlayer* syncplayer, DWORD dwDelta)
     
     do stuff here idk
 */
-static int WINAPI LongMessage(DWORD note, LPCVOID ptr, DWORD len)
+static int WINAPI LongMessage(DWORD dwMsg, LPCVOID ptr, DWORD len)
 {
     return 0;
 }
@@ -624,7 +731,7 @@ static int WINAPI dwEventCallback(DWORD note)
 }
 
 #ifndef OLDDENSE
-static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR color1)
+static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float offsx, float offsr, const KCOLOR* colors)
 {
     if(__builtin_expect(vtxidx == vertexsize, 0))
     {
@@ -636,33 +743,17 @@ static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float 
     
     struct quad* __restrict ck = quads + (vtxidx++);
     
+    KCOLOR color1 = colors[0];
+    
     #ifdef ROUNDEDGE
-    //DWORD color = colortable[dwUID];
-    //DWORD color1 = color; //(color & 0xFEFEFEFE) >> 1 | (1 << 31);
+    #error Please fix this shit
+    
     #ifdef PFAKEY
-        #ifndef HDR
-        KCOLOR color2 = ((color1 & 0xFEFEFEFE) >> 1) | (0xFF << 24);
-        #else
-        KCOLOR color2 = (KCOLOR){
-            color1.r * 0.5F,
-            color1.g * 0.5F,
-            color1.b * 0.5F,
-            1.0F
-        };
-        #endif
+        KCOLOR color2 = color_blacken1(color1);
     #else
         KCOLOR color2 = color1;
     #endif
-    #ifndef HDR
-    KCOLOR color3 = ((color1 & 0xFCFCFCFC) >> 2) | (0xFF << 24);
-    #else
-    KCOLOR color3 = (KCOLOR){
-        color1.r * 0.25F,
-        color1.g * 0.25F,
-        color1.b * 0.25F,
-        1.0F
-    };
-    #endif
+    KCOLOR color3 = color_blacken2(color1);
     KCOLOR color = color1;
     //KCOLOR color2 = color1;
     //KCOLOR color3 = color;
@@ -702,35 +793,13 @@ static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float 
     
     #else
     
-    //KCOLOR color1 = colortable[dwUID];
+    KCOLOR color1 = colors[0];
     
     #ifdef OUTLINE
     
-    #ifdef PFAKEY
-        #ifndef HDR
-        KCOLOR color2 = ((color1 & 0xFEFEFEFE) >> 1) | (0xFF << 24);
-        #else
-        KCOLOR color2 = (KCOLOR){
-            color1.r * 0.5F,
-            color1.g * 0.5F,
-            color1.b * 0.5F,
-            1.0F
-        };
-        #endif
-    #else
-        KCOLOR color2 = color1;
-    #endif
+    KCOLOR color2 = colors[1];
     
-    #ifndef HDR
-    KCOLOR color3 = ((color1 & 0xFCFCFCFC) >> 2) | (0xFF << 24);
-    #else
-    KCOLOR color3 = (KCOLOR){
-        color1.r * 0.25F,
-        color1.g * 0.25F,
-        color1.b * 0.25F,
-        1.0F
-    };
-    #endif
+    KCOLOR color3 = color_blacken2(color1);
     
     float origoffsy = offsy;
     float origoffst = offst;
@@ -788,7 +857,7 @@ static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float 
     #endif
 }
 #else
-static void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR color1)
+static void AddRawVtx(float offsy, float offst, float offsx, float offsr, const KCOLOR* colors)
 {
      if(vtxidx == vertexsize)
     {
@@ -801,33 +870,16 @@ static void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR
     struct quad* __restrict ck = quads + (vtxidx++);
     
     #ifdef ROUNDEDGE
+    #error Fix this shit pls
     //DWORD color = colortable[dwUID];
-    //DWORD color1 = color; //(color & 0xFEFEFEFE) >> 1 | (1 << 31);
+    //DWORD color1 = color; //color_blacken1(color);
     
     #ifdef PFAKEY
-        #ifndef HDR
-        KCOLOR color2 = ((color1 & 0xFEFEFEFE) >> 1) | (0xFF << 24);
-        #else
-        KCOLOR color2 = (KCOLOR){
-            color1.r * 0.5F,
-            color1.g * 0.5F,
-            color1.b * 0.5F,
-            1.0F
-        };
-        #endif
+        KCOLOR color2 = color_blacken1(color1);
     #else
         KCOLOR color2 = color1;
     #endif
-    #ifndef HDR
-    KCOLOR color3 = ((color1 & 0xFCFCFCFC) >> 2) | (0xFF << 24);
-    #else
-    KCOLOR color3 = (KCOLOR){
-        color1.r * 0.25F,
-        color1.g * 0.25F,
-        color1.b * 0.25F,
-        1.0F
-    };
-    #endif
+    KCOLOR color3 = color_blacken2(color1);
     KCOLOR color = color1;
     //KCOLOR color2 = color1;
     //KCOLOR color3 = color;
@@ -867,20 +919,11 @@ static void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR
     
     #else
     
-    //KCOLOR color1 = colortable[dwUID];
+    KCOLOR color1 = colors[0];
     
     #ifdef OUTLINE
     
-    #ifndef HDR
-    KCOLOR color3 = ((color1 & 0xFCFCFCFC) >> 2) | (0xFF << 24);
-    #else
-    KCOLOR color3 = (KCOLOR){
-        color1.r * 0.25F,
-        color1.g * 0.25F,
-        color1.b * 0.25F,
-        1.0F
-    };
-    #endif
+    KCOLOR color3 = color_blacken2(color1);
     
     ck->quads[0] = (struct quadpart){offsx, offst, color3};
     ck->quads[1] = (struct quadpart){offsx, offsy, color3};
@@ -911,20 +954,7 @@ static void AddRawVtx(float offsy, float offst, float offsx, float offsr, KCOLOR
         offsx += widthmagic;
         offsr -= widthmagic;
     #endif
-        #ifdef PFAKEY
-            #ifndef HDR
-            KCOLOR color2 = ((color1 & 0xFEFEFEFE) >> 1) | (0xFF << 24);
-            #else
-            KCOLOR color2 = (KCOLOR){
-                color1.r * 0.5F,
-                color1.g * 0.5F,
-                color1.b * 0.5F,
-                1.0F
-            };
-            #endif
-        #else
-            KCOLOR color2 = color1;
-        #endif
+        KCOLOR color2 = colors[1];
         
         ck->quads[0] = (struct quadpart){offsx, offst, color1};
         ck->quads[1] = (struct quadpart){offsx, offsy, color1};
@@ -986,7 +1016,7 @@ static __attribute__((noinline)) void AddVtx(NoteNode localnode, ULONGLONG currt
         #endif
     }
     
-    AddRawVtx(offsy, offst, offsx, offsr, colortable[localnode.uid >> 8]);
+    AddRawVtx(offsy, offst, offsx, offsr, &colortable[(localnode.uid >> 8) << 1]);
 }
 
 static __attribute__((noinline)) void AddWideVtx(ULONGLONG start, float height, ULONGLONG currtick, float tickscale, DWORD range, DWORD color)
@@ -1017,7 +1047,11 @@ static __attribute__((noinline)) void AddWideVtx(ULONGLONG start, float height, 
     kc.a = (BYTE)(color >> 24) ? ((BYTE)(color >> 24)) / 255.0F : 1.0F;
     #endif
     
-    AddRawVtx(offsy, offst, offsx, offsr, kc);
+    KCOLOR kc_send[2];
+    kc_send[0] = kc;
+    kc_send[1] = kc;
+    
+    AddRawVtx(offsy, offst, offsx, offsr, kc_send);
 }
 
 #if defined(PFACOLOR)
@@ -1325,13 +1359,13 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     }
     while(0);
     
-    trackcount <<= 4; // *= 16;
+    trackcount *= 16; // 16 channels per track
     
-    colortable = malloc(trackcount * sizeof(*colortable));
+    colortable = malloc(trackcount * 2 * sizeof(*colortable)); // 2 gradient colors
     if(!colortable)
         puts("No colortable, fuck");
     
-    midisize += sizeof(*colortable) * trackcount;
+    midisize += sizeof(*colortable) * trackcount * 2;
     
     do
     {
@@ -1343,51 +1377,42 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         DWORD i = 0;
         
-        while(i != trackcount)
+        while(i < (trackcount * 2))
         {
             DWORD ic = 3;
             
             int col = 0xFF;
             
-    #ifdef PFACOLOR
+        #ifdef PFACOLOR
             DWORD seeds[3];
-    #endif
+        #endif
             
             while(ic--)
             {
                 seed *= 214013;
                 seed += 2531011;
                 
-    #ifdef PFACOLOR
+            #ifdef PFACOLOR
                 seeds[2 - ic] = seed >> 16;
-    #endif
+            #endif
                 
                 col = ((seed & 0x7F) + 80) | (col << 8);
             }
-    
+            
+            
     #ifdef O3COLOR
-        col = dominodark[(((i >> 4) + 6) % (sizeof(dominodark)/sizeof(*dominodark)))] | (0xFF << 24);
-        
-        #ifdef HDR
-        col = (((col >>  0) & 0xFF) << 16)
-            | (((col >>  8) & 0xFF) <<  8)
-            | (((col >> 16) & 0xFF) <<  0)
-            | (0xFF << 24);
-        #endif
-        
-        ic = 16;
-        while(ic--)
-        #ifndef HDR
-            colortable[i++] = col;
-        #else
-            colortable[i++] = (KCOLOR){
-                (BYTE)(col >> 0) * (1.0F / 255.0F),
-                (BYTE)(col >> 8) * (1.0F / 255.0F),
-                (BYTE)(col >> 16) * (1.0F / 255.0F),
-                1.0F
-            };
-        #endif
+            col = dominodark[(((i >> 4) + 6) % (sizeof(dominodark)/sizeof(*dominodark)))] | (0xFF << 24);
+            
+            #ifdef HDR
+            col = (((col >>  0) & 0xFF) << 16)
+                | (((col >>  8) & 0xFF) <<  8)
+                | (((col >> 16) & 0xFF) <<  0)
+                | (0xFF << 24);
+            #endif
+            
+            ic = 16;
     #else
+            ic = 1;
     #ifdef PFACOLOR
             float light = ((seeds[0] % 20) + 80) / 100.0F;
         #ifdef ROUNDEDGE
@@ -1395,23 +1420,43 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #else
             float sat = ((seeds[1] % 40) + 60) / 100.0F;
         #endif
-            colortable[i++] = HSV2RGB((seeds[2] % 360) / 360.0F, sat, light)
+            col = HSV2RGB((seeds[2] % 360) / 360.0F, sat, light)
             #ifndef HDR
                 | (0xFF << 24)
             #endif
             ;
-    #else
-        #ifndef HDR
-            colortable[i++] = col;
-        #else
-            colortable[i++] = (KCOLOR){
-                (BYTE)(col >> 0) * (1.0F / 255.0F),
-                (BYTE)(col >> 8) * (1.0F / 255.0F),
-                (BYTE)(col >> 16) * (1.0F / 255.0F),
-                1.0F
-            };
-        #endif
     #endif
+            
+            do
+            {
+            #ifndef HDR
+                colortable[i] = col;
+                
+                #ifdef PFAKEY
+                    colortable[i + 1] = color_blacken1(colortable[i]);
+                #else
+                    colortable[i + 1] = col;
+                #endif
+                
+                i += 2;
+            #else
+                colortable[i] = (KCOLOR){
+                    (BYTE)(col >> 0) * (1.0F / 255.0F),
+                    (BYTE)(col >> 8) * (1.0F / 255.0F),
+                    (BYTE)(col >> 16) * (1.0F / 255.0F),
+                    1.0F
+                };
+                
+                #ifdef PFAKEY
+                    colortable[i + 1] = color_blacken1(colortable[i]);
+                #else
+                    colortable[i + 1] = colortable[i];
+                #endif
+                
+                i += 2;
+            #endif
+            }
+            while(--ic);
     #endif
         }
     }
@@ -1863,6 +1908,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         // ===[BAD IDEA NEVER UNCOMMENT THIS]===
         
         #if defined(HDR) && !defined(FASTHDR)
+        #error Fix this soon
         #ifdef TRIPPY
         const float uc = 0.1F;
         const float kc = -1.0F;
@@ -2142,6 +2188,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #endif
         
         #if defined(PIANOBAR)
+        #error Fix this soon
         AddRawVtx(-1.02, -0.98, 0, 600, (KCOLOR){1.0, 0.0, 0.0, 1});
         #endif
         
@@ -2220,7 +2267,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 }
                 #endif
                 
-                dwColor = LerpColor(dwColor, ((colortable[lmn->uid >> 8] )/*& 0xFEFEFEFE) >> 1*/), coloralpha)
+                dwColor = LerpColor(dwColor, colortable[(lmn->uid >> 8) << 1], coloralpha)
                 #ifndef HDR
                 | (0xFF << 24)
                 #endif
@@ -2229,7 +2276,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 #ifdef HDR
                 shalpha[i] = coloralpha;
                 //shcolor[i] = dwColor;
-                shcolor[i] = colortable[lmn->uid >> 8];
+                shcolor[i] = colortable[(lmn->uid >> 8) << 1];
                 #endif
                 
                 if(lmn->start > delta)
@@ -2255,7 +2302,11 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             
             #ifndef NOKEYBOARD
             
-            //AddRawVtx(1.0F, !blackflag ? 1.15F : 1.25F, posflag, posflag + 2, colortable[KeyNotes[i].uid >> 8]);
+            KCOLOR kbcolors[2];
+            kbcolors[0] = dwColor;
+            kbcolors[1] = color_blacken1(dwColor);
+            
+            //AddRawVtx(1.0F, !blackflag ? 1.15F : 1.25F, posflag, posflag + 2, &colortable[(KeyNotes[i].uid >> 8) << 1]);
             AddRawVtx(
             #ifdef PIANOKEYS
                 blackflag
@@ -2276,7 +2327,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             #else
                 posflag, posflag + 1
             #endif
-                , dwColor);
+                , kbcolors);
             #endif
             
             #ifdef PIANOKEYS
