@@ -1197,6 +1197,9 @@ DWORD fps_wmai;
 
 static BOOL isrender;
 
+#ifdef HEADLESS
+static
+#endif
 DWORD WINAPI RenderThread(PVOID lpParameter)
 {
     puts("Hello from renderer");

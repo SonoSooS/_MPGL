@@ -5,6 +5,8 @@
 
 #include "config.h"
 
+#ifndef HEADLESS
+
 #include "GL/ctor.h"
 #include "GL/core.h"
 #include "GL/utility.h"
@@ -542,3 +544,5 @@ void grfInstallShader(void)
     notecounter = 0;
     #endif
 }
+
+#endif

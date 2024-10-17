@@ -6,11 +6,13 @@
 
 #include "config.h"
 
+#ifndef HEADLESS
 #include "GL/ctor.h"
 #include "GL/core.h"
 #include "GL/utility.h"
 
 #include <GL/wglext.h>
+#endif
 
 #include "player/mmplayer.h"
 
