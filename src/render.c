@@ -606,10 +606,11 @@ static void FPS_SyncFunc(MMPlayer* syncplayer, DWORD dwDelta)
     
     do stuff here idk
 */
+/*
 static int WINAPI LongMessage(DWORD dwMsg, LPCVOID ptr, DWORD len)
 {
     return 0;
-}
+}*/
 
 /*
     Callback for the player
@@ -1687,7 +1688,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     ply->SyncPtr = &player->RealTime;
     ply->SyncOffset = 50000000;
     ply->KShortMsg = dwEventCallback;
-    ply->KLongMsg = LongMessage;
+    ply->KLongMsg = 0;//LongMessage;
     ply->KSyncFunc = NoteReturn;
     
     player->SleepTimeMax = 0;
