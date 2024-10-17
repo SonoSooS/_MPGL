@@ -133,6 +133,8 @@ typedef struct NoteNode
 #endif
 } NoteNode;
 
+const SIZE_T szNode = sizeof(NoteNode);
+
 MMPlayer* ply;
 MMPlayer* player;
 
@@ -193,8 +195,8 @@ static NoteNode* VisibleNoteListHead;
 static NoteNode* *ActiveNoteList;
 static KCOLOR*   colortable;
 
-static QWORD notealloccount;
-static QWORD currnotealloc;
+QWORD notealloccount;
+QWORD currnotealloc;
 
 
 //seems to work properly

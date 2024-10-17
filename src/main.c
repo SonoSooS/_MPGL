@@ -43,7 +43,7 @@ static MMPlayer* realplayer;
 static ULONGLONG realsync = 0;
 
 #ifndef HEADLESS
-DWORD WINAPI RenderThread(PVOID lpParameter);
+extern DWORD WINAPI RenderThread(PVOID lpParameter);
 
 static HGLRC CreateGLContext(HWND wnd, HDC dc)
 {
@@ -181,7 +181,7 @@ static LRESULT CALLBACK WindowProc(HWND wnd, UINT uMsg, WPARAM wParam, LPARAM lP
             
             LRESULT cwresult = DefWindowProcW(wnd, uMsg, wParam, lParam);
             
-            //fuck lose10 for breaking a such simple thing as AdjustWindowRect ª_ª
+            //fuck lose10 for breaking a such simple thing as AdjustWindowRect Âª_Âª
             
             RECT wndrect;
             RECT clirect;
@@ -555,6 +555,14 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
     
     return 0;
 }
+
+DWORD (WINAPI*mGetModuleBaseNameA)
+(
+    HANDLE  hProcess,
+    HMODULE hModule,
+    LPSTR   lpBaseName,
+    DWORD   nSize
+);
 
 int main(int argc, char** argv)
 {

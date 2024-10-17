@@ -37,6 +37,10 @@ extern ULONGLONG currnps;
 extern ULONGLONG drawnotesraw;
 extern ULONGLONG drawnotes;
 
+extern QWORD notealloccount;
+extern QWORD currnotealloc;
+extern const SIZE_T szNode;
+
 extern QWORD midisize;
 
 #ifdef TEXTNPS
@@ -65,7 +69,7 @@ GLint uniGrfFontBgColor;
 GLuint texGrfFont;
 
 
-void grfFontSetBg(DWORD color)
+static void grfFontSetBg(DWORD color)
 {
     float bgc[4];
     bgc[0] = (BYTE)(color >> 0) / 255.0F;
@@ -76,7 +80,7 @@ void grfFontSetBg(DWORD color)
     glUniform4fv(uniGrfFontBgColor, 1, (GLfloat*)bgc);
 }
 
-void grfDrawFontString(int32_t x, int32_t y, int32_t scale, DWORD color, const char* text)
+static void grfDrawFontString(int32_t x, int32_t y, int32_t scale, DWORD color, const char* text)
 {
     DWORD startx = x;
     
@@ -273,11 +277,11 @@ void grfDrawFontOverlay(void)
         grfDrawFontString(TEXTL, TEXTU - 4, 2, dwColor, buf);
         
         textlen = sprintf(buf, "%.3fMB slots",
-                          (float)(currnotealloc * sizeof(NoteNode)) / (1024.0F * 1024.0F));
+                          (float)(currnotealloc * szNode) / (1024.0F * 1024.0F));
         grfDrawFontString(TEXTR, TEXTD - 3, 2, dwColor, buf);
         
         textlen = sprintf(buf, "%.3fMB total",
-                          (float)(midisize + (currnotealloc * sizeof(NoteNode))) / (1024.0F * 1024.0F));
+                          (float)(midisize + (currnotealloc * szNode)) / (1024.0F * 1024.0F));
         grfDrawFontString(TEXTR, TEXTD - 0, 2, dwColor >> 1, buf);
     }
     #endif

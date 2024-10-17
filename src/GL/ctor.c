@@ -3,7 +3,7 @@
 #include "core.h"
 #undef GLDEFINE
 
-DWORD (WINAPI*mGetModuleBaseNameA)
+extern DWORD (WINAPI*mGetModuleBaseNameA)
 (
     HANDLE  hProcess,
     HMODULE hModule,
