@@ -133,6 +133,65 @@ static void grfDrawFontString(int32_t x, int32_t y, int32_t scale, DWORD color, 
     }
 }
 
+static char _commabuf[32];
+static DWORD _commanums[8];
+
+static void _commanumber_internal(ULONGLONG num, char* buf)
+{
+    DWORD i = 0;
+    int nch;
+    
+    do
+    {
+        _commanums[i] = num % 1000;
+        num /= 1000;
+        ++i;
+    }
+    while(num);
+    
+    --i;
+    
+    nch = sprintf(buf, "%u", _commanums[i]);
+    buf += nch;
+    
+    while(i)
+    {
+        --i;
+        
+        nch = sprintf(buf, ",%03u", _commanums[i]);
+        buf += nch;
+    }
+}
+
+static const char* const _commanumberU(ULONGLONG num)
+{
+    _commabuf[0] = ' ';
+    
+    _commanumber_internal(num, _commabuf+1);
+    
+    return _commabuf;
+}
+
+static const char* const _commanumber(int num)
+{
+    ULONGLONG n;
+    
+    if(num < 0)
+    {
+        _commabuf[0] = '-';
+        n = (ULONGLONG)(DWORD)-num;
+    }
+    else
+    {
+        _commabuf[0] = ' ';
+        n = num;
+    }
+    
+    _commanumber_internal(n, _commabuf+1);
+    
+    return _commabuf;
+}
+
 void grfDrawFontOverlay(void)
 {
     if(vtxidx)
@@ -185,27 +244,30 @@ void grfDrawFontOverlay(void)
         #define TEXTU 10
         #define TEXTD -7
         #define TEXTROFFS(offs) -textlen
+        #define TEXTLOFFS(offs) textlen
     #else
         #define TEXTL -128
         #define TEXTR 128-textlen-textlen
         #define TEXTU 70
         #define TEXTD 70
         #define TEXTROFFS(offs) (TEXTR - offs)
+        #define TEXTLOFFS(offs) (TEXTL + offs)
     #endif
     
     #ifdef TEXTNPS
-    textlen = sprintf(buf, "%llu N/s ", currnps);
+    textlen = sprintf(buf, "%s N/s ", _commanumberU(currnps));
     grfDrawFontString(TEXTROFFS(2), ybase - 2, 2, -1, buf);
     #endif
     
     #if !defined(TEXTCUSTOM1) || 1
-    textlen = sprintf(buf, "%llu NoS ", drawnotes);
+    textlen = sprintf(buf, "%s NoS ", _commanumberU(drawnotes));
     grfDrawFontString(TEXTROFFS(2), ybase - /*0*/ 4, 2, -1, buf);
     #endif
     
-    
-    textlen = sprintf(buf, " %llu notes", notecounter);
+    #ifdef TEXTNPS
+    textlen = sprintf(buf, " %s notes", _commanumberU(notecounter));
     grfDrawFontString(TEXTR, ybase - 0, 2, -1, buf);
+    #endif
     
     #ifdef WMA_SIZE
     ULONGLONG wma = 0;
@@ -289,7 +351,7 @@ void grfDrawFontOverlay(void)
     #endif
     
     #ifdef DEBUGTEXT
-    textlen = sprintf(buf, "BPM:   %06X | %i (%6.4f)", player->tempo, player->tempo, 60000000 / (float)player->tempo);
+    textlen = sprintf(buf, "BPM:   %06X | %i (%6.2f)", player->tempo, player->tempo, 60000000 / (float)player->tempo);
     grfDrawFontString(-128, -60, 2, -1, buf);
     
     textlen = sprintf(buf, "Time:  %llu / %u == %llu (%llu + %llu)",
@@ -303,6 +365,11 @@ void grfDrawFontOverlay(void)
     
     textlen = sprintf(buf, "TPS:   %f", 1e6 * player->timediv / (double)player->tempo);
     grfDrawFontString(-128, -54, 2, -1, buf);
+    
+    textlen = sprintf(buf, "Sleep: %14.14s", _commanumber(player->_debug_sleeptime));
+    grfDrawFontString(TEXTLOFFS(2), ybase - 6, 2, -1, buf);
+    textlen = sprintf(buf, "Delta: %14.14s", _commanumber(player->_debug_deltasleep));
+    grfDrawFontString(TEXTLOFFS(2), ybase - 8, 2, -1, buf);
     
     
     #ifdef EXTREMEDEBUG

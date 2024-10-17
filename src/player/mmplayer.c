@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
 
+#include "config.h"
 #include "mmplayer.h"
 
 //#define ENDDEAD
@@ -352,9 +353,11 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 if(player->KSyncFunc)
                     player->KSyncFunc(player, minsleep);
                 
+            #ifdef DEBUGTEXT
                 //printf("\rtimer %20lli %10i %10i    ", ticker, sleeptime, deltasleep);
-                //player->_debug_deltasleep = deltasleep;
-                //player->_debug_sleeptime = sleeptime;
+                player->_debug_deltasleep = deltasleep;
+                player->_debug_sleeptime = sleeptime;
+            #endif
                 
                 //improves crash performance
                 if(sleeptime <= 0)

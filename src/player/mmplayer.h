@@ -33,6 +33,10 @@ typedef struct MMPlayer
     LONGLONG* SyncPtr;
     LONGLONG SyncOffset;
     LONGLONG RealTimeUndiv;
+#ifdef DEBUGTEXT
+    INT32 _debug_deltasleep;
+    INT32 _debug_sleeptime;
+#endif
 } MMPlayer;
 
 MMPlayer* mmpDuplicatePlayer(const MMPlayer* other);
