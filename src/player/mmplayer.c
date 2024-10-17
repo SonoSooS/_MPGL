@@ -14,11 +14,13 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     
     player->done = 0;
     
+    extern int _VDSO_QueryInterruptTime(PULONGLONG _outtime);
     int(WINAPI*NtDelayExecution)(int doalert, INT64* timeptr) = 0;
     int(WINAPI*NtQuerySystemTime)(ULONGLONG* timeptr) = 0;
     
     NtDelayExecution = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtDelayExecution");
-    NtQuerySystemTime = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtQuerySystemTime");
+    //NtQuerySystemTime = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtQuerySystemTime");
+    NtQuerySystemTime = (void*)_VDSO_QueryInterruptTime;
     
     QWORD counter = 0;
     DWORD tempomulti = player->tempomulti;

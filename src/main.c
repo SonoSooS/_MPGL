@@ -24,6 +24,33 @@ extern DWORD (WINAPI*mGetModuleBaseNameA)
     DWORD   nSize
 );
 
+int _VDSO_QueryInterruptTime(PULONGLONG _outtime)
+{
+#if defined(_WIN64) && 0
+    *_outtime = *(PULONGLONG)0x7FFE0008;
+    return 0;
+#else
+    PULARGE_INTEGER outtime = (PULARGE_INTEGER)_outtime;
+    volatile DWORD* vdso = (volatile DWORD*)0x7FFE0008;
+    #define VDSO_LOW 0
+    #define VDSO_HIGH 1
+    #define VDSO_CHECK 2
+    
+    for(;;)
+    {
+        DWORD bak = vdso[VDSO_HIGH];
+        if(__builtin_expect(bak != vdso[VDSO_CHECK], 0))
+            continue;
+        
+        outtime->LowPart = vdso[VDSO_LOW];
+        outtime->HighPart = bak;
+        
+        //if(ass_likely(bak == vdso[VDSO_CHECK]))
+            return 0;
+    }
+#endif
+}
+
 
 #include "exch.h"
 
@@ -183,7 +210,7 @@ static LRESULT CALLBACK WindowProc(HWND wnd, UINT uMsg, WPARAM wParam, LPARAM lP
             
             LRESULT cwresult = DefWindowProcW(wnd, uMsg, wParam, lParam);
             
-            //fuck lose10 for breaking a such simple thing as AdjustWindowRect Âª_Âª
+            //fuck lose10 for breaking a such simple thing as AdjustWindowRect ª_ª
             
             RECT wndrect;
             RECT clirect;

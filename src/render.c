@@ -1751,7 +1751,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     CreateThread(0, 0x4000, PlayerThread,    ply, 0, 0);
     //CreateThread(0, 0x4000, PlayerThread, player, 0, 0);
     
-    int(WINAPI*NtQuerySystemTime)(QWORD* timeptr) = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtQuerySystemTime");
+    extern int _VDSO_QueryInterruptTime(PULONGLONG _outtime);
+    //int(WINAPI*NtQuerySystemTime)(QWORD* timeptr) = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtQuerySystemTime");
+    int(WINAPI*NtQuerySystemTime)(QWORD* timeptr) = (void*)_VDSO_QueryInterruptTime;
     
     QWORD prevtime;
     NtQuerySystemTime(&prevtime);
