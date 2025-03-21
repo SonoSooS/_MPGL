@@ -82,9 +82,9 @@ const DWORD minwidth = 16;
 #ifdef TIMI_CUSTOMSCROLL
 #define TICKVAL FPS_scroll
 #else
-#define TICKVAL player->TickCounter
+#define TICKVAL PlayerReal->TickCounter
 #endif
-#define TICKVAR ply->TickCounter
+#define TICKVAR PlayerNotecatcher->TickCounter
 #endif
 
 
@@ -165,8 +165,8 @@ typedef struct NoteNode
 
 const SIZE_T szNode = sizeof(NoteNode);
 
-MMPlayer* ply;
-MMPlayer* player;
+MMPlayer* PlayerNotecatcher;
+MMPlayer* PlayerReal;
 
 struct quad* quads;
 size_t vtxidx;
@@ -467,7 +467,7 @@ static int WINAPI dwLongMsg(DWORD dwMsg, LPCVOID ptr, DWORD len)
             j = i + 2;
         }
         
-        KCOLOR* colorbase = &colortable[player->CurrentTrack->trackid * (16 << 1)];
+        KCOLOR* colorbase = &colortable[PlayerReal->CurrentTrack->trackid * (16 << 1)];
         
         KCOLOR color1, color2;
         
@@ -523,7 +523,7 @@ static int WINAPI dwLongMsg(DWORD dwMsg, LPCVOID ptr, DWORD len)
 #ifdef TIMI_TIEMR
 static int timiTimerFunc(PULONGLONG timeout)
 {
-    *timeout = player->RealTime;
+    *timeout = PlayerReal->RealTime;
     return 0;
 }
 #endif
@@ -535,16 +535,16 @@ static int WINAPI FPS_ShortMsg(DWORD note)
 }
 
 #ifdef TIMI_IMPRECISE
-#define NEXTFRAME ((10000000ULL / FPS_DENIM) * player->timediv * FPS_frame * FPS_NOMIN)
+#define NEXTFRAME ((10000000ULL / FPS_DENIM) * PlayerReal->timediv * FPS_frame * FPS_NOMIN)
 #else
-#define NEXTFRAME ((10000000ULL * FPS_frame * FPS_NOMIN * player->timediv) / FPS_DENIM)
+#define NEXTFRAME ((10000000ULL * FPS_frame * FPS_NOMIN * PlayerReal->timediv) / FPS_DENIM)
 #endif
 
 
 static void FPS_SyncFunc(MMPlayer* syncplayer, DWORD dwDelta)
 {
     ULONGLONG nextframe = NEXTFRAME;
-    if(nextframe <= player->RealTimeUndiv)
+    if(nextframe <= PlayerReal->RealTimeUndiv)
     {
         #ifdef TIMI_CUSTOMSCROLL
         FPS_scroll = nextframe;
@@ -553,7 +553,7 @@ static void FPS_SyncFunc(MMPlayer* syncplayer, DWORD dwDelta)
         int(WINAPI*NtDelayExecution)(BOOL doalert, INT64* timeptr)
                 = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtDelayExecution");
         
-        while(!ply->done && (INT64)(ply->RealTime - (player->RealTime + ply->SyncOffset)) < 0)
+        while(!PlayerNotecatcher->done && (INT64)(PlayerNotecatcher->RealTime - (PlayerReal->RealTime + PlayerNotecatcher->SyncOffset)) < 0)
         {
             INT64 sleep = -1;
             NtDelayExecution(TRUE, &sleep);
@@ -574,7 +574,7 @@ static void FPS_SyncFunc(MMPlayer* syncplayer, DWORD dwDelta)
         for(;;)
         {
             nextframe = NEXTFRAME;
-            if(nextframe <= player->RealTimeUndiv)
+            if(nextframe <= PlayerReal->RealTimeUndiv)
             {
                 puts("Frame drop");
                 
@@ -628,7 +628,7 @@ static int WINAPI dwEventCallback(DWORD note)
     
     DWORD uid = (BYTE)(note >> 8) | ((note & 0xF) << 8)
     #ifdef TRACKID
-    | (ply->CurrentTrack->trackid << 12)
+    | (PlayerNotecatcher->CurrentTrack->trackid << 12)
     #endif
     ;
     
@@ -685,7 +685,7 @@ static int WINAPI dwEventCallback(DWORD note)
         node->end = ~0;
         node->uid = uid
     #ifndef TRACKID
-        | (ply->CurrentTrack->trackid << 12)
+        | (PlayerNotecatcher->CurrentTrack->trackid << 12)
     #endif
         ;
         
@@ -793,8 +793,6 @@ static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float 
     ck->quads[0xB] = (struct quadpart){offsr, fquad, color3};*/
     
     #else
-    
-    KCOLOR color1 = colors[0];
     
     #ifdef OUTLINE
     
@@ -1349,14 +1347,14 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     notealloccount = 0;
     currnotealloc = 0;
     
-    ply = *(MMPlayer**)lpParameter;
-    player = ((MMPlayer**)lpParameter)[1];
+    PlayerNotecatcher = ((MMPlayer**)lpParameter)[0];
+    PlayerReal = ((MMPlayer**)lpParameter)[1];
     
     midisize += 2 * sizeof(MMPlayer);
     
     do
     {
-        MMTrack* trk = ply->tracks;
+        MMTrack* trk = PlayerNotecatcher->tracks;
         while((trk++)->ptrs)
             trackcount++;
     }
@@ -1685,15 +1683,15 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
     
-    ply->SyncPtr = &player->RealTime;
-    ply->SyncOffset = 50000000;
-    ply->KShortMsg = dwEventCallback;
-    ply->KLongMsg = 0;//LongMessage;
-    ply->KSyncFunc = NoteReturn;
+    PlayerNotecatcher->SyncPtr = &PlayerReal->RealTime;
+    PlayerNotecatcher->SyncOffset = 50000000;
+    PlayerNotecatcher->KShortMsg = dwEventCallback;
+    PlayerNotecatcher->KLongMsg = 0;//LongMessage;
+    PlayerNotecatcher->KSyncFunc = NoteReturn;
     
-    player->SleepTimeMax = 0;
-    player->SleepTicks = 1;
-    player->KLongMsg = dwLongMsg;
+    PlayerReal->SleepTimeMax = 0;
+    PlayerReal->SleepTicks = 1;
+    PlayerReal->KLongMsg = dwLongMsg;
     
     
     #ifdef TIMI_CAPTURE
@@ -1701,28 +1699,28 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     timersync = timersync >> 2;
     
     #ifndef TIMI_NOCAPTURE
-    player->SyncPtr = (LONGLONG*)&timersync;
-    player->SyncOffset = 0;
+    PlayerReal->SyncPtr = (LONGLONG*)&timersync;
+    PlayerReal->SyncOffset = 0;
     #endif
     
     #ifndef TIMI_NOWAIT
     #ifdef TIMI_SILENT
-    player->KShortMsg = FPS_ShortMsg;
+    PlayerReal->KShortMsg = FPS_ShortMsg;
     #endif
-    player->KSyncFunc = FPS_SyncFunc;
+    PlayerReal->KSyncFunc = FPS_SyncFunc;
     #endif
     
-    ply->SleepTicks = 1;
-    ply->SleepTimeMax = 0;
+    PlayerNotecatcher->SleepTicks = 1;
+    PlayerNotecatcher->SleepTimeMax = 0;
     #endif
     
     #if defined(TEXTNPS)
-    kNPOriginal = player->KShortMsg;
-    kNSOriginal = player->KSyncFunc;
-    player->KShortMsg = kNPIntercept;
-    player->KSyncFunc = kNPSync;
+    kNPOriginal = PlayerReal->KShortMsg;
+    kNSOriginal = PlayerReal->KSyncFunc;
+    PlayerReal->KShortMsg = kNPIntercept;
+    PlayerReal->KSyncFunc = kNPSync;
     #elif defined(DYNASCROLL)
-    player->KSyncFunc = NoteSync;
+    PlayerReal->KSyncFunc = NoteSync;
     
     syncvalue = 0;
     mmnotesync = 0;
@@ -1736,20 +1734,20 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         if(timisettimer)
         {
             timisettimer((void*)timiTimerFunc);
-            player->SyncPtr = (LONGLONG*)&timersync;
-            player->SyncOffset = 0;
+            PlayerReal->SyncPtr = (LONGLONG*)&timersync;
+            PlayerReal->SyncOffset = 0;
         }
     }
     while(0);
     #endif
     
     #ifdef TIMI_CAPTURE
-    if(!player->KShortMsg)
-        player->KShortMsg = FPS_ShortMsg;
+    if(!PlayerReal->KShortMsg)
+        PlayerReal->KShortMsg = FPS_ShortMsg;
     #endif
     
-    CreateThread(0, 0x4000, PlayerThread,    ply, 0, 0);
-    //CreateThread(0, 0x4000, PlayerThread, player, 0, 0);
+    CreateThread(0, 0x4000, PlayerThread, PlayerNotecatcher, 0, 0);
+    //CreateThread(0, 0x4000, PlayerThread, PlayerReal, 0, 0);
     
     extern int _VDSO_QueryInterruptTime(PULONGLONG _outtime);
     //int(WINAPI*NtQuerySystemTime)(QWORD* timeptr) = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtQuerySystemTime");
@@ -1801,22 +1799,22 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     {
         if(canrender && !isrender)
         {
-            CreateThread(0, 0x4000, PlayerThread, player, 0, 0);
+            CreateThread(0, 0x4000, PlayerThread, PlayerReal, 0, 0);
             
             isrender = TRUE;
             
             #if defined(TIMI_CAPTURE) && !defined(TIMI_NOCAPTURE)
             
-            player->SyncPtr = (LONGLONG*)&timersync;
-            player->SyncOffset = 0;
+            PlayerReal->SyncPtr = (LONGLONG*)&timersync;
+            PlayerReal->SyncOffset = 0;
             
-            //player->KShortMsg = FPS_ShortMsg;
-            //player->KSyncFunc = FPS_SyncFunc;
+            //PlayerReal->KShortMsg = FPS_ShortMsg;
+            //PlayerReal->KSyncFunc = FPS_SyncFunc;
             #endif
         }
         
         #if defined(TIMI_CAPTURE) && !defined(TIMI_NOWAIT)
-        if(!FPS_capture && player->tracks->ptrs)
+        if(!FPS_capture && PlayerReal->tracks->ptrs)
         {
             timeout = 1;
             continue;
@@ -1879,7 +1877,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #if defined(TRANSFORM) || defined(ROTAT)
         * 4
         #endif
-        ) / player->tempomulti;
+        ) / PlayerReal->tempomulti;
         #endif
         ULONGLONG notesync = TICKVAR;
         ULONGLONG currtick = TICKVAL;
@@ -1887,21 +1885,21 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #endif
         
         #ifdef KEYBOARD
-        currtimer = player->RealTime;
+        currtimer = PlayerReal->RealTime;
         #endif
         
         #ifdef SHTIME
         #ifdef DYNASCROLL
         BIND_IF(glUniform1f, uniGrTime, (float)(currtick / (double)tickheight * 0.25));
         #else
-        BIND_IF(glUniform1f, uniGrTime, (float)((double)(player->RealTime) / 1e7));
+        BIND_IF(glUniform1f, uniGrTime, (float)((double)(PlayerReal->RealTime) / 1e7));
         #endif
         #endif
         
         ULONGLONG midtick = currtick + tickheight;
         ULONGLONG toptick = midtick + tickheight;
         
-        //printf("%10llu %10llu %i %u\n", notesync, currtick, (int)(notesync - currtick), player->tempo);
+        //printf("%10llu %10llu %i %u\n", notesync, currtick, (int)(notesync - currtick), PlayerReal->tempo);
         
         // ===[BAD IDEA NEVER UNCOMMENT THIS]===
         /*if(!timeout && notesync < midtick)
@@ -1943,10 +1941,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         #if 1 && defined(DEBUGTEXT) && defined(NOISEOVERLAY)
         {
-            LONGLONG asdtick = currtick - (currtick % player->timediv) - player->timediv - player->timediv;
+            LONGLONG asdtick = currtick - (currtick % PlayerReal->timediv) - PlayerReal->timediv - PlayerReal->timediv;
             do
             {
-                asdtick += player->timediv;
+                asdtick += PlayerReal->timediv;
                 
                 for(int asdi = 0; asdi != 0x80; asdi++)
                 {
@@ -1954,7 +1952,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                     debugnode.next = 0;
                     debugnode.uid = asdi;
                     debugnode.start = asdtick;
-                    debugnode.end = asdtick + player->timediv;
+                    debugnode.end = asdtick + PlayerReal->timediv;
                     
                     AddVtx(debugnode, currtick, tickscale);
                     
@@ -2136,16 +2134,16 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #ifdef DEBUGTEXT
         BIND_IF(glUniform1f, attrGrNotemix, 0.0F);
         
-        LONGLONG debugtick = currtick - (currtick % player->timediv) - player->timediv - player->timediv;
+        LONGLONG debugtick = currtick - (currtick % PlayerReal->timediv) - PlayerReal->timediv - PlayerReal->timediv;
         do
         {
-            debugtick += player->timediv;
+            debugtick += PlayerReal->timediv;
             
             NoteNode debugnode;
             debugnode.next = 0;
             debugnode.uid = 0;
             debugnode.start = debugtick;
-            debugnode.end = debugtick + (player->timediv >> 1) + (player->timediv >> 2);
+            debugnode.end = debugtick + (PlayerReal->timediv >> 1) + (PlayerReal->timediv >> 2);
             
             AddVtx(debugnode, currtick, tickscale);
             
@@ -2395,7 +2393,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         if(vtxidx)
             FlushToilet();
-        //printf("Drawn: %10llu | Desync: %10lli\n", notesdrawn, player->RealTime - ply->RealTime);
+        //printf("Drawn: %10llu | Desync: %10lli\n", notesdrawn, PlayerReal->RealTime - PlayerNotecatcher->RealTime);
         //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         //glDrawArrays(GL_TRIANGLES, 0, 3);
         //glDrawElements(GL_TRIANGLES, 6 * vtxidx, GL_UNSIGNED_INT, indexes);s
@@ -2507,7 +2505,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #endif
         
         //#ifndef KEYBOARD
-        if(player->tracks->ptrs)
+        if(PlayerReal->tracks->ptrs)
             continue;
         
         #ifdef GRACE

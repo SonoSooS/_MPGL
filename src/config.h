@@ -58,8 +58,9 @@
 #define WMA_SIZE 16
 //#define WMA_SIZE 3
 
-//#define CUSTOMTICK player->timediv >> 3
-#define CUSTOMTICK player->timediv
+//#define CUSTOMTICK PlayerReal->timediv >> 3
+//#define CUSTOMTICK PlayerReal->timediv >> 2
+#define CUSTOMTICK   PlayerReal->timediv
 
 #define TIMI_FPS_DENIM 60
 #define TIMI_FPS_NOMIN 1

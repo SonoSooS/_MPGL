@@ -33,7 +33,7 @@ struct textquad
 };
 
 
-extern MMPlayer* player;
+extern MMPlayer* PlayerReal;
 
 extern ULONGLONG currnps;
 extern ULONGLONG drawnotesraw;
@@ -223,7 +223,7 @@ void grfDrawFontOverlay(void)
     glVertexAttribPointer(attrGrfFontUV, 2, GL_UNSIGNED_SHORT, GL_FALSE, 16, (void*)12);
     
     #ifdef SHNPS
-    glUniform1f(uniGrfFontTime, (float)((double)(player->RealTime) / 1e7));
+    glUniform1f(uniGrfFontTime, (float)((double)(PlayerReal->RealTime) / 1e7));
     glUniform1f(uniGrfFontNPS, (float)currnps);
     #endif
     
@@ -351,24 +351,24 @@ void grfDrawFontOverlay(void)
     #endif
     
     #ifdef DEBUGTEXT
-    textlen = sprintf(buf, "BPM:   %06X | %i (%6.2f)", player->tempo, player->tempo, 60000000 / (float)player->tempo);
+    textlen = sprintf(buf, "BPM:   %06X | %i (%6.2f)", PlayerReal->tempo, PlayerReal->tempo, 60000000 / (float)PlayerReal->tempo);
     grfDrawFontString(-128, -60, 2, -1, buf);
     
     textlen = sprintf(buf, "Time:  %llu / %u == %llu (%llu + %llu)",
-        player->RealTimeUndiv, player->timediv,
-        player->RealTimeUndiv / player->timediv,
-        player->RealTime, (player->RealTimeUndiv / player->timediv) - player->RealTime);
+        PlayerReal->RealTimeUndiv, PlayerReal->timediv,
+        PlayerReal->RealTimeUndiv / PlayerReal->timediv,
+        PlayerReal->RealTime, (PlayerReal->RealTimeUndiv / PlayerReal->timediv) - PlayerReal->RealTime);
     grfDrawFontString(-128, -58, 2, -1, buf);
     
-    textlen = sprintf(buf, "Ticks: %llu", player->TickCounter);
+    textlen = sprintf(buf, "Ticks: %llu", PlayerReal->TickCounter);
     grfDrawFontString(-128, -56, 2, -1, buf);
     
-    textlen = sprintf(buf, "TPS:   %f", 1e6 * player->timediv / (double)player->tempo);
+    textlen = sprintf(buf, "TPS:   %f", 1e6 * PlayerReal->timediv / (double)PlayerReal->tempo);
     grfDrawFontString(-128, -54, 2, -1, buf);
     
-    textlen = sprintf(buf, "Sleep: %14.14s", _commanumber(player->_debug_sleeptime));
+    textlen = sprintf(buf, "Sleep: %14.14s", _commanumber(PlayerReal->_debug_sleeptime));
     grfDrawFontString(TEXTLOFFS(2), ybase - 6, 2, -1, buf);
-    textlen = sprintf(buf, "Delta: %14.14s", _commanumber(player->_debug_deltasleep));
+    textlen = sprintf(buf, "Delta: %14.14s", _commanumber(PlayerReal->_debug_deltasleep));
     grfDrawFontString(TEXTLOFFS(2), ybase - 8, 2, -1, buf);
     
     
@@ -444,9 +444,9 @@ void grfDrawFontOverlay(void)
     }
     
     /*
-    sprintf(buf, "slp: %10i", player->_debug_sleeptime);
+    sprintf(buf, "slp: %10i", PlayerReal->_debug_sleeptime);
     grfDrawFontString(-126, 70, 2, -1, buf);
-    sprintf(buf, "lag: %10i", player->_debug_deltasleep);
+    sprintf(buf, "lag: %10i", PlayerReal->_debug_deltasleep);
     grfDrawFontString(-126, 68, 2, -1, buf);
     */
     
