@@ -210,7 +210,7 @@ static LRESULT CALLBACK WindowProc(HWND wnd, UINT uMsg, WPARAM wParam, LPARAM lP
             
             LRESULT cwresult = DefWindowProcW(wnd, uMsg, wParam, lParam);
             
-            //fuck lose10 for breaking a such simple thing as AdjustWindowRect ª_ª
+            //fuck lose10 for breaking a such simple thing as AdjustWindowRect Âª_Âª
             
             RECT wndrect;
             RECT clirect;
@@ -870,6 +870,8 @@ int main(int argc, char** argv)
     
     puts("Showing FormMain");
     
+    timeBeginPeriod(1);
+    
     ShowWindow(glwnd, SW_SHOWNORMAL);
     
     MSG msg;
@@ -881,13 +883,19 @@ int main(int argc, char** argv)
     }
     
     puts("GetMessage loop broken");
+    
+    timeEndPeriod(1);
 
 #else
+    timeBeginPeriod(1);
+    
     CreateThread(0, 0x4000, PlayerThread, player, 0, 0);
     while(player->tracks->ptrs)
     {
         Sleep(1);
     }
+    
+    timeEndPeriod(1);
 #endif
     
 #ifndef TRIPLEO

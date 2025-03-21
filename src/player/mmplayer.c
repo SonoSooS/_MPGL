@@ -9,7 +9,6 @@
 DWORD WINAPI PlayerThread(PVOID lpParameter)
 {
     puts("Hello from player");
-    timeBeginPeriod(1);
     
     MMPlayer* player = (MMPlayer*)lpParameter;
     
@@ -419,7 +418,6 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     
     player->done = true;
     puts("Player died :(");
-    timeEndPeriod(1);
     
     return 0;
 }
