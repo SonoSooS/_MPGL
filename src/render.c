@@ -2202,6 +2202,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             delta = (currtimer - lasttimer) * 6;
             //delta = (currtimer - lasttimer) * 3;
         
+        if(!delta)
+            delta = 100000; // 10ms
+        
         #ifdef PIANOKEYS
         BOOL blackflag = FALSE;
         int keyflag = 0;
@@ -2513,7 +2516,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         vtxidx = 0;
         for(DWORD i = 0; i != 128; i++)
         {
-            if(KeyNotes[i].start || KeyNotes[i].uid)
+            if(KeyNotes[i].start)
             {
                 vtxidx = 1;
                 break;
@@ -2521,7 +2524,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         }
         
         if(vtxidx)
+        {
+            vtxidx = 0;
             continue;
+        }
         #endif
         
         if(midisize)
