@@ -1,43 +1,62 @@
 #pragma once
 
 #include <wtypes.h>
+#include "types.h"
 
-typedef ULONGLONG QWORD; //why what fuck
+typedef u64 MMTick;
 
-typedef struct MMTrack
+typedef union MMEvent MMEvent;
+typedef struct MMTrack MMTrack;
+typedef struct MMPlayer MMPlayer;
+
+typedef int(WINAPI*cbMMShortMsg)(DWORD msg);
+typedef int(WINAPI*cbMMLongMsg)(DWORD msg, LPCVOID buf, DWORD len);
+typedef void(WINAPI*cbMMSync)(MMPlayer* player, DWORD deltaTicks);
+
+union MMEvent
 {
-    BYTE* ptrs;
-    BYTE* ptre;
-    QWORD nextcounter;
-    DWORD trackid;
-    BYTE cmd, prm1, prm2, sbz;
-    
-} MMTrack;
+    struct
+    {
+        u8 cmd;
+        u8 prm1;
+        u8 prm2;
+        u8 _sbz;
+    };
+    u32 dwEvent;
+};
 
-typedef struct MMPlayer
+struct MMTrack
 {
-    QWORD TickCounter;
-    LONGLONG RealTime;
-    DWORD SleepTimeMax;
-    DWORD SleepTicks;
+    u8* ptrs;
+    u8* ptre;
+    MMTick nextcounter;
+    u32 trackid;
+    MMEvent event;
+};
+
+struct MMPlayer
+{
+    MMTick TickCounter;
+    s64 RealTime;
+    u32 SleepTimeMax;
+    u32 SleepTicks;
     MMTrack* tracks;
     MMTrack* CurrentTrack;
-    DWORD flags;
-    DWORD tempo;
-    DWORD tempomulti;
-    WORD timediv;
-    WORD done;
-    int(WINAPI*KShortMsg)(DWORD msg);
-    int(WINAPI*KLongMsg)(DWORD msg, LPCVOID buf, DWORD len);
-    void(*KSyncFunc)(struct MMPlayer* player, DWORD dwDelta);
-    LONGLONG* SyncPtr;
-    LONGLONG SyncOffset;
-    LONGLONG RealTimeUndiv;
+    u32 tempo;
+    u32 tempomulti;
+    u32 timediv;
+    bool done;
+    cbMMShortMsg KShortMsg;
+    cbMMLongMsg KLongMsg;
+    cbMMSync KSyncFunc;
+    s64* SyncPtr;
+    s64 SyncOffset;
+    s64 RealTimeUndiv;
 #ifdef DEBUGTEXT
-    INT32 _debug_deltasleep;
-    INT32 _debug_sleeptime;
+    s32 _debug_deltasleep;
+    s32 _debug_sleeptime;
 #endif
-} MMPlayer;
+};
 
 MMPlayer* mmpDuplicatePlayer(const MMPlayer* other);
 DWORD WINAPI PlayerThread(PVOID lpParameter);

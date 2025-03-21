@@ -100,7 +100,7 @@ extern BOOL canrender;
 extern HMODULE KSModule;
 
 
-extern QWORD midisize;
+extern size_t midisize;
 
 
 static inline KCOLOR color_blacken1(KCOLOR color)
@@ -225,8 +225,8 @@ static NoteNode* VisibleNoteListHead;
 static NoteNode* *ActiveNoteList;
 static KCOLOR*   colortable;
 
-QWORD notealloccount;
-QWORD currnotealloc;
+size_t notealloccount;
+size_t currnotealloc;
 
 
 //seems to work properly
@@ -288,7 +288,7 @@ static inline void NoteFree(NoteNode* __restrict node)
 }
 
 #ifdef DYNASCROLL
-static QWORD syncvalue;
+static MMTick syncvalue;
 
 static void NoteSync(MMPlayer* syncplayer, DWORD dwDelta)
 {
@@ -367,7 +367,7 @@ static void kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
 static DWORD returnfailcount;
 
 #ifdef DYNASCROLL
-static QWORD mmnotesync;
+static MMTick mmnotesync;
 #endif
 
 static void NoteReturn(MMPlayer* syncplayer, DWORD dwDelta)
@@ -1750,12 +1750,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     //CreateThread(0, 0x4000, PlayerThread, PlayerReal, 0, 0);
     
     extern int _VDSO_QueryInterruptTime(PULONGLONG _outtime);
-    //int(WINAPI*NtQuerySystemTime)(QWORD* timeptr) = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtQuerySystemTime");
-    int(WINAPI*NtQuerySystemTime)(QWORD* timeptr) = (void*)_VDSO_QueryInterruptTime;
+    //int(WINAPI*NtQuerySystemTime)(ULONGLONG* timeptr) = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtQuerySystemTime");
+    int(WINAPI*NtQuerySystemTime)(ULONGLONG* timeptr) = (void*)_VDSO_QueryInterruptTime;
     
-    QWORD prevtime;
+    ULONGLONG prevtime;
     NtQuerySystemTime(&prevtime);
-    QWORD currtime = prevtime;
+    ULONGLONG currtime = prevtime;
     
     DWORD timeout = 0;
     

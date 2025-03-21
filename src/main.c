@@ -360,7 +360,7 @@ static int dwNoMessage(DWORD dwParam1)
 
 #endif
 
-QWORD midisize;
+size_t midisize;
 
 #ifdef MIDI_MMIO
 static HANDLE filemap = 0;

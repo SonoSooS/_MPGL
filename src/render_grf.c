@@ -39,11 +39,11 @@ extern ULONGLONG currnps;
 extern ULONGLONG drawnotesraw;
 extern ULONGLONG drawnotes;
 
-extern QWORD notealloccount;
-extern QWORD currnotealloc;
+extern size_t notealloccount;
+extern size_t currnotealloc;
 extern const SIZE_T szNode;
 
-extern QWORD midisize;
+extern size_t midisize;
 
 #ifdef TEXTNPS
 extern struct histogram* hist;

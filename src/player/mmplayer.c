@@ -13,7 +13,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     
     MMPlayer* player = (MMPlayer*)lpParameter;
     
-    player->done = 0;
+    player->done = false;
     
     extern int _VDSO_QueryInterruptTime(PULONGLONG _outtime);
     int(WINAPI*NtDelayExecution)(int doalert, INT64* timeptr) = 0;
@@ -23,7 +23,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     //NtQuerySystemTime = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtQuerySystemTime");
     NtQuerySystemTime = (void*)_VDSO_QueryInterruptTime;
     
-    QWORD counter = 0;
+    MMTick counter = 0;
     DWORD tempomulti = player->tempomulti;
     DWORD tempomaxsleep = player->SleepTicks;
     DWORD minsleep = -1;
@@ -417,7 +417,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
         }
     }
     
-    player->done = 1;
+    player->done = true;
     puts("Player died :(");
     timeEndPeriod(1);
     
