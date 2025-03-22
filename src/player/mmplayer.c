@@ -267,6 +267,8 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 
                 printf("Bypass\ncmd=%02X msg.cmd=%02X msg=%08X\n", swcmd, msg.cmd, *(DWORD*)&msg);
                 
+                __builtin_trap();
+                
                 cmdend:
                 
                 //printf("command %08X\n", *(DWORD*)&msg);
