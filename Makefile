@@ -48,7 +48,9 @@ else
 ARCH	:= $(OVERARCH)
 endif
 
-CFLAGS	:=	-g -Wall -Og -ffast-math -ffunction-sections -fdata-sections \
+CFLAGS	:=	-g -Wall -O2 -ffast-math -ffunction-sections -fdata-sections \
+			-fno-unwind-tables -fno-asynchronous-unwind-tables -fno-exceptions \
+			-Wno-unknown-pragmas \
 			$(ARCH) \
 			-Wno-format
 
@@ -62,9 +64,9 @@ CFLAGS	+=	-std=gnu11
 OBJCFLAGS:=	$(CFLAGS)
 
 ASFLAGS	:=	-g $(ARCH)
-LDFLAGS	:=	-g $(ARCH) -Wl,--gc-sections
+LDFLAGS	:=	-g $(ARCH) -Wl,--gc-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-exceptions
 
-LIBS	:=	-lopengl32 -lgdi32 -lm -lmingw32 -mconsole -mwindows -static-libgcc
+LIBS	:=	-lopengl32 -lgdi32 -lm -lmingw32 -lwinmm -mconsole -mwindows
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
