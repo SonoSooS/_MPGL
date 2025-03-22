@@ -1351,15 +1351,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     PlayerReal = ((MMPlayer**)lpParameter)[1];
     
     midisize += 2 * sizeof(MMPlayer);
-    
-    do
-    {
-        MMTrack* trk = PlayerNotecatcher->tracks;
-        while((trk++)->ptrs)
-            trackcount++;
-    }
-    while(0);
-    
+    trackcount = PlayerNotecatcher->TrackCount;
     trackcount *= 16; // 16 channels per track
     
     colortable = malloc(trackcount * 2 * sizeof(*colortable)); // 2 gradient colors
@@ -1814,7 +1806,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         }
         
         #if defined(TIMI_CAPTURE) && !defined(TIMI_NOWAIT)
-        if(!FPS_capture && PlayerReal->tracks->ptrs)
+        if(!FPS_capture && !PlayerReal->done)
         {
             timeout = 1;
             continue;
@@ -2508,7 +2500,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #endif
         
         //#ifndef KEYBOARD
-        if(PlayerReal->tracks->ptrs)
+        if(!PlayerReal->done)
             continue;
         
         #ifdef GRACE

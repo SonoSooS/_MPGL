@@ -40,6 +40,8 @@ struct MMPlayer
     s64 RealTime;
     u32 SleepTimeMax;
     u32 SleepTicks;
+    u32 _pad;
+    u32 TrackCount;
     MMTrack* tracks;
     MMTrack* CurrentTrack;
     u32 tempo;

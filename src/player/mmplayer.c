@@ -425,13 +425,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
 MMPlayer* mmpDuplicatePlayer(const MMPlayer* other)
 {
     MMTrack* base = other->tracks;
-    DWORD trackcount = 0;
-    while(base->ptrs)
-    {
-        trackcount++;
-        base++;
-    }
-    
+    DWORD trackcount = other->TrackCount;
     if(!trackcount)
         return 0;
     
@@ -449,7 +443,7 @@ MMPlayer* mmpDuplicatePlayer(const MMPlayer* other)
     
     memcpy(ply, other, sizeof(MMPlayer));
     ply->tracks = tracks;
-    memcpy(tracks, other->tracks, trackcount * sizeof(MMTrack));
+    memcpy(tracks, base, trackcount * sizeof(MMTrack));
     
     return ply;
 }

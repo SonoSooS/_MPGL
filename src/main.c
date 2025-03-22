@@ -210,7 +210,7 @@ static LRESULT CALLBACK WindowProc(HWND wnd, UINT uMsg, WPARAM wParam, LPARAM lP
             
             LRESULT cwresult = DefWindowProcW(wnd, uMsg, wParam, lParam);
             
-            //fuck lose10 for breaking a such simple thing as AdjustWindowRect Âª_Âª
+            //fuck lose10 for breaking a such simple thing as AdjustWindowRect ª_ª
             
             RECT wndrect;
             RECT clirect;
@@ -575,6 +575,8 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
         }
     }
     
+    player->TrackCount = timediv;
+    
     player->timediv = __builtin_bswap16(*(WORD*)(ptr + 0xC));
     
     player->tempo = 500000;
@@ -890,7 +892,7 @@ int main(int argc, char** argv)
     timeBeginPeriod(1);
     
     CreateThread(0, 0x4000, PlayerThread, player, 0, 0);
-    while(player->tracks->ptrs)
+    while(!player->done)
     {
         Sleep(1);
     }
