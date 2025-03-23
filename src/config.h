@@ -47,12 +47,12 @@
 #define TEXTNEAT
 #define TEXTCUSTOM1
 #define TEXTTRANS
-//#define GRACE
+#define GRACE
 //#define DEBUGTEXT
 //#define EXTREMEDEBUG
 #define OLDDENSE
 //#define NOISEOVERLAY
-#define BUGFIXTEST
+//#define BUGFIXTEST
 //#define NORENDEROPT
 
 #define WMA_SIZE 16
