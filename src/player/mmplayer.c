@@ -4,7 +4,10 @@
 #include "config.h"
 #include "mmplayer.h"
 
-//#define ENDDEAD
+#ifdef MODE_BH
+#include "bh.h"
+#endif
+
 
 DWORD WINAPI PlayerThread(PVOID lpParameter)
 {
@@ -23,6 +26,9 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     NtQuerySystemTime = (void*)_VDSO_QueryInterruptTime;
     
     MMTick counter = 0;
+#ifndef MODE_BH
+    //MMTick bigcounter = ~0;
+#endif
     DWORD tempomulti = player->tempomulti;
     DWORD tempomaxsleep = player->SleepTicks;
     DWORD minsleep = -1;
@@ -79,6 +85,25 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
         }
     }
     
+#ifdef MODE_BH
+    uint32_t trk_cnt = player->TrackCount;
+    bh* trk_lst = malloc(bh_c(trk_cnt));
+    bh_ct(trk_lst, trk_cnt);
+    MMTrack* *trk_ret = malloc(trk_cnt * sizeof(MMTrack*));
+    uint32_t trk_ret_cnt = 0;
+    
+    {
+        MMTrack* __restrict trk2 = player->tracks;
+        uint32_t e = bh_s(trk_lst);
+        while(trk2 < trk)
+        {
+            bh_a(trk_lst, trk2);
+            ++trk2;
+        }
+        bh_q(trk_lst, e);
+    }
+#endif
+    
     NtQuerySystemTime(&tickdiff);
     
     int(WINAPI*KShortMsg)(DWORD msg) = player->KShortMsg;
@@ -91,6 +116,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
         
         for(;;)
         {
+#ifndef MODE_BH
             if(!trk->ptrs) break;
             
             if(trk->nextcounter > counter)
@@ -98,6 +124,20 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 trk++;
                 continue;
             }
+#else
+            MMTrack** h = bh_n(trk_lst);
+            if(h)
+                trk = *h;
+            else
+                break;
+            
+            if(trk->nextcounter <= counter)
+                ;
+            else
+                break;
+            
+            bh_d(trk_lst, NULL);
+#endif
             
             player->CurrentTrack = trk;
             
@@ -105,11 +145,8 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
             BYTE* ptre = trk->ptre;
             DWORD slep = 0;
             
-            struct
-            {
-                BYTE cmd, prm1, prm2, sbz;
-            } msg;
-            *(DWORD*)&msg = trk->cmd;
+            MMEvent msg;
+            msg.dwEvent = trk->event.cmd;
             
             do
             {
@@ -195,20 +232,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                         }
                         if(meta == 0x2F)
                         {
-                            MMTrack* bkptr = trk;
-                            for(;;)
-                            {
-#ifdef ENDDEAD
-                                DWORD dw = 1 << 12;
-                                while(dw--)
-                                    KShortMsg(((dw & 0xFF) << 8) | (dw >> 8) | 0x80);
-#endif
-                                
-                                memcpy(bkptr, bkptr + 1, sizeof(*bkptr));
-                                if(!bkptr->ptrs) break;
-                                bkptr++;
-                            }
-                            break;
+                            goto track_merge;
                         }
                         if(meta == 0x51)
                         {
@@ -289,9 +313,14 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                     if(trk->nextcounter > counter)
                     {
                         trk->ptrs = ptrs;
-                        trk->cmd = msg.cmd;
-                        trk++;
-                        break;
+                        trk->event.cmd = msg.cmd;
+                        
+#ifndef MODE_BH
+                        //if(trk->nextcounter < bigcounter)
+                        //    bigcounter = trk->nextcounter;
+#endif
+                        
+                        goto track_next;
                     }
                     continue;
                 }
@@ -304,34 +333,86 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                         KShortMsg(((dw & 0xFF) << 8) | (dw >> 8) | 0x80);
 #endif
                     
-                    MMTrack* bkptr = trk;
-                    for(;;)
-                    {
-                        memcpy(bkptr, bkptr + 1, sizeof(*bkptr));
-                        if(!bkptr->ptrs) break;
-                        bkptr++;
-                    }
-                    break;
+                    goto track_merge;
                 }
             }
             while(1);
+            
+            puts("Reached event processor trap, aborting");
+            __builtin_trap();
+            
+            track_next:
+#ifndef MODE_BH
+            ++trk;
+#else
+            trk_ret[trk_ret_cnt++] = trk;
+#endif
+            continue;
+            
+            track_merge:
+#ifndef MODE_BH
+            {
+                MMTrack* bkptr = trk;
+                for(;;)
+                {
+                    memcpy(bkptr, bkptr + 1, sizeof(*bkptr));
+                    if(!bkptr->ptrs) break;
+                    bkptr++;
+                }
+            }
+#else
+            
+#endif
+            continue;
         }
         
-        trk = player->tracks;
-        
-        for(;;)
-        {
-            if(!trk->ptrs) break;
-            
-            DWORD diff = trk->nextcounter - counter;
-            if(diff < minsleep)
-                minsleep = diff;
-            
-            trk++;
-        }
-        
+#ifndef MODE_BH
         if(trk == player->tracks)
             break;
+        
+        //if(bigcounter != ~0)
+        //{
+        //    minsleep = bigcounter - counter;
+        //    bigcounter = ~0;
+        //}
+        //else
+        {
+            // I hate this method so much, it's so slow
+            
+            trk = player->tracks;
+            
+            for(;;)
+            {
+                if(!trk->ptrs) break;
+                
+                DWORD diff = trk->nextcounter - counter;
+                if(diff < minsleep)
+                    minsleep = diff;
+                
+                trk++;
+            }
+            
+            if(trk == player->tracks)
+                break;
+        }
+#else
+        
+        uint32_t lst_res = bh_s(trk_lst);
+        for(uint32_t i = 0; i < trk_ret_cnt; ++i)
+            bh_a(trk_lst, trk_ret[i]);
+        trk_ret_cnt = 0;
+        bh_q(trk_lst, lst_res);
+        
+        {
+            MMTrack** e = bh_n(trk_lst);
+            if(!e)
+                break;
+            
+            trk = *e;
+        }
+        
+        minsleep = trk->nextcounter - counter;
+#endif
         
         if(!player->SyncPtr)
         {        
@@ -419,6 +500,10 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     }
     
     player->done = true;
+#ifdef MODE_BH
+    free(trk_lst);
+    free(trk_ret);
+#endif
     puts("Player died :(");
     
     return 0;

@@ -9,6 +9,8 @@
 //#define MIDI_MMIO
 //#define HEADLESS
 
+//#define MODE_BH
+
 // ========[Renderer config]========
 
 #define TRACKID
