@@ -175,7 +175,8 @@ const size_t vertexsize =
     1 << 12;
 #else
     //1 << 18;
-    1 << 12;
+    //1 << 12;
+    1 << 18;
 #endif
 
 /*
@@ -986,7 +987,8 @@ static inline void pianokey(float* __restrict offsx, float* __restrict offsr, BY
     DWORD rawoffs = (div * 7 * keymul) + num;
     
     *offsx = rawoffs;
-    *offsr = rawoffs + ((mod & 1) ? (keymul - (keymul >> 2)) : keymul);
+    //*offsr = rawoffs + ((mod & 1) ? (keymul - (keymul >> 2)) : keymul);
+    *offsr = (float)(rawoffs + (keymul - ((keymul >> 2) * (mod & 1))));
 }
 #endif
 
