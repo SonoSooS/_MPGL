@@ -8,6 +8,46 @@
 #include "bh.h"
 #endif
 
+__declspec(noinline) const u8* __restrict varlen_decode_slow(const u8* __restrict ptr, u32* __restrict out, u8 data)
+{
+    u32 result = (data & 0x7F) << 7;
+    
+    data = *(ptr++); if(data < 0x80) {goto done;}
+    result = (result + (data & 0x7F)) << 7;
+    data = *(ptr++); if(data < 0x80) {goto done;}
+    result = (result + (data & 0x7F)) << 7;
+    //WTF, varlen is undefined above 28bits, it's invalid to have bit7 set for the 4th byte
+    data = *(ptr++); goto done;
+    
+done:
+    result += data;
+    *out = result;
+    return ptr;
+}
+
+__forceinline const u8* __restrict varlen_decode(const u8* __restrict ptr, u32* __restrict out)
+{
+    u8 data = *(ptr++);
+    if(__builtin_expect(data < 0x80, 1))
+    {
+        *out = data;
+        return ptr;
+    }
+    
+    return varlen_decode_slow(ptr, out, data);
+}
+
+__declspec(noinline) void tracks_merge(MMTrack* __restrict ptr)
+{
+    for(;;)
+    {
+        *ptr = *(ptr + 1);
+        if(!ptr->ptrs)
+            return;
+        ++ptr;
+    }
+}
+
 
 DWORD WINAPI PlayerThread(PVOID lpParameter)
 {
@@ -29,9 +69,9 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
 #ifndef MODE_BH
     //MMTick bigcounter = ~0;
 #endif
-    DWORD tempomulti = player->tempomulti;
-    DWORD tempomaxsleep = player->SleepTicks;
-    DWORD minsleep = -1;
+    u32 tempomulti = player->tempomulti;
+    u32 tempomaxsleep = player->SleepTicks;
+    u32 minsleep = -1;
     
     if(player->SleepTimeMax)
     {
@@ -41,11 +81,11 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
             player->SleepTicks = 1;
     }
     
-    ULONGLONG ticker = 0;
-    ULONGLONG tickdiff = 0;
-    INT32 tdiff = 0;
-    INT32 oldsleep = 0;
-    INT32 deltasleep = 0;
+    MMTick ticker = 0;
+    MMTick tickdiff = 0;
+    s32 tdiff = 0;
+    s32 oldsleep = 0;
+    s32 deltasleep = 0;
     
     MMTrack* trk = player->tracks;
     
@@ -53,17 +93,11 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     {
         if(!trk->ptrs) break;
         
-        BYTE* ptrs = trk->ptrs;
-        BYTE* ptre = trk->ptre;
-        DWORD slep = 0;
-        do
-        {
-            INT8 v = *(INT8*)(ptrs++);
-            slep = (slep << 7) | ((BYTE)v & 0x7F);
-            if(v >= 0)
-                break;
-        }
-        while(ptrs < ptre);
+        u8* ptrs = trk->ptrs;
+        u8* ptre = trk->ptre;
+        
+        u32 slep;
+        ptrs = varlen_decode(ptrs, &slep);
         
         if(ptrs < ptre)
         {
@@ -74,13 +108,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
         }
         else
         {
-            MMTrack* bkptr = trk;
-            for(;;)
-            {
-                memcpy(bkptr, bkptr + 1, sizeof(*bkptr));
-                if(!bkptr->ptrs) break;
-                bkptr++;
-            }
+            tracks_merge(trk);
             continue;
         }
     }
@@ -97,6 +125,9 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
         uint32_t e = bh_s(trk_lst);
         while(trk2 < trk)
         {
+            if(!trk2->ptrs)
+                break;
+            
             bh_a(trk_lst, trk2);
             ++trk2;
         }
@@ -117,9 +148,12 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
         for(;;)
         {
 #ifndef MODE_BH
-            if(!trk->ptrs) break;
+            if(!trk->ptrs)
+                break;
             
-            if(trk->nextcounter > counter)
+            if(trk->nextcounter <= counter)
+                ;
+            else
             {
                 trk++;
                 continue;
@@ -141,188 +175,170 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
             
             player->CurrentTrack = trk;
             
-            BYTE* ptrs = trk->ptrs;
-            BYTE* ptre = trk->ptre;
-            DWORD slep = 0;
+            u8* __restrict ptrs = trk->ptrs;
+            u8* ptre = trk->ptre;
+            
+            u32 slep = 0;
             
             MMEvent msg;
             msg.dwEvent = trk->event.cmd;
             
             do
             {
-                INT8 v = *(INT8*)ptrs;
-                if(v < 0)
+                u8 v = *ptrs;
+                if(__builtin_expect(v >= 0x80, 1))
                 {
-                    msg.cmd = (BYTE)v;
+                    msg.cmd = v;
                     ptrs++;
                 }
                 
-                BYTE swcmd = (msg.cmd >> 4) & 7;
+                u8 swcmd = msg.cmd;
+                //if(__builtin_expect(swcmd < 0xA0, 1))
+                if(0)
+                {
+                    if(__builtin_expect(swcmd >= 0x90, 1))
+                    {
+                        msg.prm1 = *(ptrs++);
+                        msg.prm2 = *(ptrs++);
+                        
+                        if((msg.prm2 != 1) || player->SyncPtr)
+                            KShortMsg(msg.dwEvent);
+                        
+                        goto cmdend;
+                    }
+                    else
+                    {
+                        msg.prm1 = *(ptrs++);
+                        msg.prm2 = *(ptrs++);
+                        
+                        KShortMsg(msg.dwEvent);
+                        
+                        goto cmdend;
+                    }
+                }
                 
-                if(swcmd == 1)
+                if(swcmd < 0xC0)
                 {
                     msg.prm1 = *(ptrs++);
                     msg.prm2 = *(ptrs++);
                     
-                    if(msg.prm2 != 1 || player->SyncPtr)
-                        KShortMsg(*(DWORD*)&msg);
+                    KShortMsg(msg.dwEvent);
                     
                     goto cmdend;
                 }
                 
-                if(swcmd == 0)
-                {
-                    msg.prm1 = *(ptrs++);
-                    msg.prm2 = *(ptrs++);
-                    
-                    KShortMsg(*(DWORD*)&msg);
-                    
-                    goto cmdend;
-                }
-                
-                if(swcmd < 4)
-                {
-                    msg.prm1 = *(ptrs++);
-                    msg.prm2 = *(ptrs++);
-                    
-                    KShortMsg(*(DWORD*)&msg);
-                    
-                    goto cmdend;
-                }
-                
-                if(swcmd < 6)
+                if(swcmd < 0xE0)
                 {
                     msg.prm1 = *(ptrs++);
                     msg.prm2 = 0;
                     
-                    KShortMsg(*(DWORD*)&msg);
+                    KShortMsg(msg.dwEvent);
                     
                     goto cmdend;
                 }
                 
-                if(swcmd == 6)
+                if(swcmd < 0xF0)
                 {
                     msg.prm1 = *(ptrs++);
                     msg.prm2 = *(ptrs++);
                     
-                    KShortMsg(*(DWORD*)&msg);
+                    KShortMsg(msg.dwEvent);
                     
                     goto cmdend;
                 }
                 
-                if(swcmd == 7)
+                if(msg.cmd == 0xFF) // meta
                 {
-                    if(msg.cmd == 0xFF)
+                    u8 meta = *(ptrs++);
+                    u32 metalen;
+                    ptrs = varlen_decode(ptrs, &metalen);
+                    
+                    if(meta < 10)
                     {
-                        BYTE meta = *(ptrs++);
-                        
-                        DWORD metalen = 0;
-                        do
-                        {
-                            INT8 v = *(INT8*)(ptrs++);
-                            metalen = (metalen << 7) | ((BYTE)v & 0x7F);
-                            if(v >= 0)
-                                break;
-                        }
-                        while(ptrs < ptre);
-                        
-                        if(meta < 10)
-                        {
-                            //TODO print text
-                        }
-                        if(meta == 0x2F)
-                        {
-                            goto track_merge;
-                        }
-                        if(meta == 0x51)
-                        {
-                            DWORD newtick = (ptrs[0] << 16) | (ptrs[1] << 8) | (ptrs[2] << 0);
-                            player->tempo = newtick;
-                            player->tempomulti = (player->tempo * 10) / player->timediv;
-                            if(player->SleepTimeMax)
-                            {
-                                if(player->SleepTimeMax > player->tempomulti)
-                                    player->SleepTicks = player->SleepTimeMax / player->tempomulti;
-                                else
-                                    player->SleepTicks = 1;
-                            }
-                            tempomaxsleep = player->SleepTicks;
-                            tempomulti = player->tempomulti;
-                        }
-                        
-                        if(player->KLongMsg)
-                        {
-                            msg.prm1 = meta;
-                            player->KLongMsg(*(DWORD*)&msg, ptrs, metalen);
-                        }
-                        
-                        ptrs += metalen;
-                        goto cmdend;
+                        //TODO print text
                     }
-                    if(msg.cmd == 0xF0)
+                    if(meta == 0x2F)
                     {
-                        DWORD metalen = 0;
-                        do
-                        {
-                            INT8 v = *(INT8*)(ptrs++);
-                            metalen = (metalen << 7) | ((BYTE)v & 0x7F);
-                            if(v >= 0)
-                                break;
-                        }
-                        while(1);
-                        
-                        if(player->KLongMsg)
-                            player->KLongMsg(*(DWORD*)&msg, ptrs, metalen);
-                        /*{
-                            *(ptrs - 1) = 0xF0;
-                            MIDIHDR hdr;
-                            zeromem(&hdr, sizeof(hdr));
-                            hdr.lpData = ptrs - 1;
-                            hdr.dwBufferLength = metalen + 1;
-                            hdr.dwBytesRecorded = metalen + 1;
-                            hdr.dwFlags = 2;
-                            while(KModMessage(0, 8, 0, (DWORD_PTR)&hdr, 0) == 67);
-                        }*/
-                        
-                        ptrs += metalen;
-                        goto cmdend;
+                        goto track_merge;
                     }
+                    if(meta == 0x51)
+                    {
+                        u32 newtick = (ptrs[0] << 16) | (ptrs[1] << 8) | (ptrs[2] << 0);
+                        player->tempo = newtick;
+                        player->tempomulti = (player->tempo * 10) / player->timediv;
+                        if(player->SleepTimeMax)
+                        {
+                            if(player->SleepTimeMax > player->tempomulti)
+                                player->SleepTicks = player->SleepTimeMax / player->tempomulti;
+                            else
+                                player->SleepTicks = 1;
+                        }
+                        tempomaxsleep = player->SleepTicks;
+                        tempomulti = player->tempomulti;
+                    }
+                    
+                    if(player->KLongMsg)
+                    {
+                        msg.prm1 = meta;
+                        player->KLongMsg(msg.dwEvent, ptrs, metalen);
+                    }
+                    
+                    ptrs += metalen;
+                    goto cmdend;
+                }
+                if(msg.cmd == 0xF0) // SysEx
+                {
+                    u32 metalen;
+                    ptrs = varlen_decode(ptrs, &metalen);
+                    
+                    if(player->KLongMsg)
+                        player->KLongMsg(msg.dwEvent, ptrs, metalen);
+                    /*{
+                        *(ptrs - 1) = 0xF0;
+                        MIDIHDR hdr;
+                        zeromem(&hdr, sizeof(hdr));
+                        hdr.lpData = ptrs - 1;
+                        hdr.dwBufferLength = metalen + 1;
+                        hdr.dwBytesRecorded = metalen + 1;
+                        hdr.dwFlags = 2;
+                        while(KModMessage(0, 8, 0, (DWORD_PTR)&hdr, 0) == 67);
+                    }*/
+                    
+                    ptrs += metalen;
+                    goto cmdend;
                 }
                 
-                printf("Bypass\ncmd=%02X msg.cmd=%02X msg=%08X\n", swcmd, msg.cmd, *(DWORD*)&msg);
+                printf("Bypass\ncmd=%02X msg.cmd=%02X msg=%08X\n", swcmd, msg.cmd, msg.dwEvent);
                 
                 __builtin_trap();
                 
                 cmdend:
                 
-                //printf("command %08X\n", *(DWORD*)&msg);
-                
-                slep = 0;
-                do
+                if(__builtin_expect(ptrs < ptre, 1))
                 {
-                    INT8 v = *(INT8*)(ptrs++);
-                    slep = (slep << 7) | ((BYTE)v & 0x7F);
-                    if(v >= 0)
-                        break;
-                }
-                while(ptrs < ptre);
-        
-                if(ptrs < ptre)
-                {
-                    trk->nextcounter += slep;
-                    if(trk->nextcounter > counter)
-                    {
-                        trk->ptrs = ptrs;
-                        trk->event.cmd = msg.cmd;
-                        
+                    slep = *(ptrs++);
+                    if(__builtin_expect(!slep, 1))
+                        continue;
+                    
+                    --ptrs;
+                    slep;
+                    ptrs = varlen_decode(ptrs, &slep);
+                    
+                    MMTick nextctr = trk->nextcounter + slep;
+                    trk->nextcounter = nextctr;
+                    
+                    if(nextctr <= counter)
+                        continue;
+                    
+                    trk->ptrs = ptrs;
+                    trk->event.cmd = msg.cmd;
+                    
 #ifndef MODE_BH
-                        //if(trk->nextcounter < bigcounter)
-                        //    bigcounter = trk->nextcounter;
+                    //if(trk->nextcounter < bigcounter)
+                    //    bigcounter = trk->nextcounter;
 #endif
-                        
-                        goto track_next;
-                    }
-                    continue;
+                    
+                    goto track_next;
                 }
                 else
                 {
@@ -351,15 +367,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
             
             track_merge:
 #ifndef MODE_BH
-            {
-                MMTrack* bkptr = trk;
-                for(;;)
-                {
-                    memcpy(bkptr, bkptr + 1, sizeof(*bkptr));
-                    if(!bkptr->ptrs) break;
-                    bkptr++;
-                }
-            }
+            merge_tracks(trk);
 #else
             
 #endif
