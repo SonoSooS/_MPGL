@@ -970,15 +970,16 @@ static void AddRawVtx(float offsy, float offst, float offsx, float offsr, const 
 #endif
 
 #ifdef PIANOKEYS
-static inline void pianokey(float* __restrict offsx, float* __restrict offsr, BYTE num)
+static const u8 keyoffssesses[] =
 {
-    int div = num / 12;
-    int mod = num % 12;
+    0, 4, 8, 14, 16, 24, 28, 32, 37, 40, 46, 48
+};
+
+static inline void pianokey(float* __restrict offsx, float* __restrict offsr, u8 num)
+{
+    u32 div = (u32)num / 12;
+    u32 mod = (u32)num % 12;
     
-    const BYTE keyoffssesses[] =
-    {
-        0, 4, 8, 14, 16, 24, 28, 32, 37, 40, 46, 48
-    };
     num = keyoffssesses[mod];
     
     if(mod > 4)
