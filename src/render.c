@@ -21,19 +21,19 @@
 
 
 #ifdef PIANOKEYS
-const DWORD keymul = 8;
+const u32 keymul = 8;
 #else
-const DWORD keymul = 1;
+const u32 keymul = 1;
 #endif
 
 #ifdef TIMI_CAPTURE
-const ULONGLONG FPS_DENIM = TIMI_FPS_DENIM;//625*4;//28125;//3840;
-const ULONGLONG FPS_NOMIN = TIMI_FPS_NOMIN;//100;//130;
-ULONGLONG FPS_frame = 0;
-volatile BOOL FPS_capture = FALSE;
+const MMTick FPS_DENIM = TIMI_FPS_DENIM;//625*4;//28125;//3840;
+const MMTick FPS_NOMIN = TIMI_FPS_NOMIN;//100;//130;
+MMTick FPS_frame = 0;
+volatile bool FPS_capture = false;
 
 #ifdef TIMI_CUSTOMSCROLL
-ULONGLONG FPS_scroll = 0;
+MMTick FPS_scroll = 0;
 #endif
 #endif
 
@@ -75,10 +75,10 @@ __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 #endif
 
 const float tickscale = 1.0F / (float)tickheight;
-const DWORD minwidth = tickheight / 32;
+const u32 minwidth = tickheight / 32;
 
 #else
-const DWORD minwidth = 16;
+const u32 minwidth = 16;
 #ifdef TIMI_CUSTOMSCROLL
 #define TICKVAL FPS_scroll
 #else
@@ -135,13 +135,13 @@ static inline KCOLOR color_blacken2(KCOLOR color)
 
 #ifdef TEXTNPS
 struct histogram* hist;
-ULONGLONG notecounter;
+u64 notecounter;
 #endif
 
 
 
-ULONGLONG drawnotesraw = 0;
-ULONGLONG drawnotes = 0;
+u64 drawnotesraw = 0;
+u64 drawnotes = 0;
 
 static void WINAPI DebugCB(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam)
 {
@@ -154,16 +154,16 @@ static void WINAPI DebugCB(GLenum source, GLenum type, GLuint id, GLenum severit
 typedef struct NoteNode
 {
     struct NoteNode* next;
-    DWORD uid;
-    ULONGLONG start;
-    ULONGLONG end;
+    u32 uid;
+    MMTick start;
+    MMTick end;
 #ifdef BUGFIXTEST
     struct NoteNode* overlapped_voce;
     size_t junk;
 #endif
 } NoteNode;
 
-const SIZE_T szNode = sizeof(NoteNode);
+const size_t szNode = sizeof(NoteNode);
 
 MMPlayer* PlayerNotecatcher;
 MMPlayer* PlayerReal;
@@ -305,13 +305,13 @@ static void NoteSync(MMPlayer* syncplayer, DWORD dwDelta)
 #ifdef TEXTNPS
 
 struct histogram *hist = 0;
-DWORD histlast = 0;
-DWORD histwrite = 0;
-ULONGLONG histsum = 0;
-ULONGLONG histdelay = 0;
-ULONGLONG onehztimer = 0;
-ULONGLONG currnote = 0;
-ULONGLONG currnps = 0;
+u32 histlast = 0;
+u32 histwrite = 0;
+MMTick histsum = 0;
+MMTick histdelay = 0;
+MMTick onehztimer = 0;
+u64 currnote = 0;
+u64 currnps = 0;
 
 int(WINAPI*kNPOriginal)(DWORD msg);
 void(WINAPI*kNSOriginal)(MMPlayer* syncplayer, DWORD dwDelta);
@@ -624,16 +624,16 @@ static int WINAPI LongMessage(DWORD dwMsg, LPCVOID ptr, DWORD len)
 */
 static int WINAPI dwEventCallback(DWORD note)
 {
-    if((BYTE)note >= 0xA0)
+    if((u8)note >= 0xA0)
         return 0;
     
-    DWORD uid = (BYTE)(note >> 8) | ((note & 0xF) << 8)
+    u32 uid = (u8)(note >> 8) | ((note & 0xF) << 8)
     #ifdef TRACKID
     | (PlayerNotecatcher->CurrentTrack->trackid << 12)
     #endif
     ;
     
-    ULONGLONG curr = TICKVAR;
+    MMTick curr = TICKVAR;
     
     NoteNode* __restrict node = ActiveNoteList[uid];
     
