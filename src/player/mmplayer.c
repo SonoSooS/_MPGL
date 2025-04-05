@@ -8,7 +8,7 @@
 #include "bh.h"
 #endif
 
-__declspec(noinline) const u8* __restrict varlen_decode_slow(const u8* __restrict ptr, u32* __restrict out, u8 data)
+__declspec(noinline) u8* varlen_decode_slow(u8* ptr, u32* __restrict out, u8 data)
 {
     u32 result = (data & 0x7F) << 7;
     
@@ -25,7 +25,7 @@ done:
     return ptr;
 }
 
-__forceinline const u8* __restrict varlen_decode(const u8* __restrict ptr, u32* __restrict out)
+__forceinline u8* varlen_decode(u8* ptr, u32* __restrict out)
 {
     u8 data = *(ptr++);
     if(__builtin_expect(data < 0x80, 1))
@@ -91,7 +91,8 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     
     for(;;)
     {
-        if(!trk->ptrs) break;
+        if(!trk->ptrs)
+            break;
         
         u8* ptrs = trk->ptrs;
         u8* ptre = trk->ptre;
@@ -188,13 +189,13 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 u8 v = *ptrs;
                 if(__builtin_expect(v >= 0x80, 1))
                 {
-                    msg.cmd = v;
                     ptrs++;
+                    msg.cmd = v;
                 }
                 
                 u8 swcmd = msg.cmd;
-                //if(__builtin_expect(swcmd < 0xA0, 1))
-                if(0)
+#if 0
+                if(__builtin_expect(swcmd < 0xA0, 1))
                 {
                     if(__builtin_expect(swcmd >= 0x90, 1))
                     {
@@ -216,9 +217,11 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                         goto cmdend;
                     }
                 }
+#endif
                 
                 if(swcmd < 0xC0)
                 {
+                msg_2b:
                     msg.prm1 = *(ptrs++);
                     msg.prm2 = *(ptrs++);
                     
@@ -239,12 +242,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 
                 if(swcmd < 0xF0)
                 {
-                    msg.prm1 = *(ptrs++);
-                    msg.prm2 = *(ptrs++);
-                    
-                    KShortMsg(msg.dwEvent);
-                    
-                    goto cmdend;
+                    goto msg_2b;
                 }
                 
                 if(msg.cmd == 0xFF) // meta
@@ -314,14 +312,13 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 
                 cmdend:
                 
+                slep = *(ptrs++);
+                if(__builtin_expect(!slep, 1))
+                    continue;
+                
                 if(__builtin_expect(ptrs < ptre, 1))
                 {
-                    slep = *(ptrs++);
-                    if(__builtin_expect(!slep, 1))
-                        continue;
-                    
                     --ptrs;
-                    slep;
                     ptrs = varlen_decode(ptrs, &slep);
                     
                     MMTick nextctr = trk->nextcounter + slep;
