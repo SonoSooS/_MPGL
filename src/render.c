@@ -1397,7 +1397,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             
             
     #ifdef O3COLOR
-            col = dominodark[(((i >> 4) + 6) % (sizeof(dominodark)/sizeof(*dominodark)))] | (0xFF << 24);
+            col = dominodark[(((i >> 5) + 6) % (sizeof(dominodark)/sizeof(*dominodark)))] | (0xFF << 24);
             
             #ifdef HDR
             col = (((col >>  0) & 0xFF) << 16)
@@ -1421,6 +1421,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 | (0xFF << 24)
             #endif
             ;
+    #endif
     #endif
             
             do
@@ -1453,7 +1454,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             #endif
             }
             while(--ic);
-    #endif
         }
     }
     while(0);
