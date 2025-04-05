@@ -103,7 +103,7 @@ extern HMODULE KSModule;
 extern size_t midisize;
 
 
-static inline KCOLOR color_blacken1(KCOLOR color)
+static KCOLOR color_blacken1(KCOLOR color)
 {
 #ifndef HDR
     return ((color & 0xFEFEFE) >> 1) | (color & 0xFF000000);
@@ -118,7 +118,7 @@ static inline KCOLOR color_blacken1(KCOLOR color)
 #endif
 }
 
-static inline KCOLOR color_blacken2(KCOLOR color)
+static KCOLOR color_blacken2(KCOLOR color)
 {
 #ifndef HDR
     return ((color & 0xFCFCFC) >> 2) | (color & 0xFF000000);
@@ -231,7 +231,7 @@ size_t currnotealloc;
 
 
 //seems to work properly
-static inline void NoteAppend(NoteNode* __restrict node)
+static void NoteAppend(NoteNode* __restrict node)
 {
     //printf("NoteAppend %08X %lli\n", node->uid, node->start);
     
@@ -253,7 +253,7 @@ static inline void NoteAppend(NoteNode* __restrict node)
     }
 }
 
-static inline NoteNode* __restrict NoteAlloc()
+static NoteNode* __restrict NoteAlloc()
 {
     if(notelist)
     {
@@ -275,9 +275,9 @@ static inline NoteNode* __restrict NoteAlloc()
     return rn;
 }
 
-static inline void NoteFree(NoteNode* __restrict node)
+static void NoteFree(NoteNode* __restrict node)
 {
-    if(!freelist_head) //keep track of first element for O(1) return
+    if(__builtin_expect(!freelist_head, 0)) //keep track of first element for O(1) return
     {
         //if(freelist)
         //    puts("Oh no, returnhead it set after freelist has been set");
@@ -401,7 +401,7 @@ static void NoteReturn(MMPlayer* syncplayer, DWORD dwDelta)
     notelist = f;
 }
 
-__attribute__((noinline)) static void FlushToilet()
+static __attribute__((noinline)) void FlushToilet()
 {
     if(vtxidx)
     {
@@ -975,7 +975,7 @@ static const u8 keyoffssesses[] =
     0, 4, 8, 14, 16, 24, 28, 32, 37, 40, 46, 48
 };
 
-static inline void pianokey(float* __restrict offsx, float* __restrict offsr, u8 num)
+static void pianokey(float* __restrict offsx, float* __restrict offsr, u8 num)
 {
     u32 div = (u32)num / 12;
     u32 mod = (u32)num % 12;
@@ -993,12 +993,12 @@ static inline void pianokey(float* __restrict offsx, float* __restrict offsr, u8
 }
 #endif
 
-static __attribute__((noinline)) void AddVtx(NoteNode localnode, ULONGLONG currtick, float tickscale)
+static __attribute__((noinline)) void AddVtx(const NoteNode* __restrict localnode, ULONGLONG currtick, float tickscale)
 {
     #ifdef PIANOKEYS
     float offsx;
     float offsr;
-    pianokey(&offsx, &offsr, localnode.uid);
+    pianokey(&offsx, &offsr, localnode->uid);
     #else
     DWORD rawoffs = localnode.uid & 0xFF;
     float offsx = rawoffs;
@@ -1007,18 +1007,18 @@ static __attribute__((noinline)) void AddVtx(NoteNode localnode, ULONGLONG currt
     
     float offsy = -1.0F;
     //if(localnode.start > currtick)
-        offsy = ((float)((int)(localnode.start - currtick)) * tickscale) - 1.0F;
+        offsy = ((float)((int)(localnode->start - currtick)) * tickscale) - 1.0F;
     float offst = 1.0F;
-    if(~localnode.end)
+    if(~localnode->end)
     {
-        offst = ((float)((int)(localnode.end - currtick)) * tickscale) - 1.0F;
+        offst = ((float)((int)(localnode->end - currtick)) * tickscale) - 1.0F;
         #ifdef TRANSFORM
         if(offst > 1.0F)
             offst = 1.0F;
         #endif
     }
     
-    AddRawVtx(offsy, offst, offsx, offsr, &colortable[(localnode.uid >> 8) << 1]);
+    AddRawVtx(offsy, offst, offsx, offsr, &colortable[(localnode->uid >> 8) << 1]);
 }
 
 #ifdef DEBUGTEXT
@@ -1187,7 +1187,7 @@ const KCOLOR dominolight[] =
 
 #ifdef KEYBOARD
 
-static inline KCOLOR LerpColor(KCOLOR color, KCOLOR def, float a)
+static __attribute__((noinline)) KCOLOR LerpColor(KCOLOR color, KCOLOR def, float a)
 {
     //printf("LerpColor %f\n", a);
     
@@ -1949,7 +1949,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                     debugnode.start = asdtick;
                     debugnode.end = asdtick + PlayerReal->timediv;
                     
-                    AddVtx(debugnode, currtick, tickscale);
+                    AddVtx(&debugnode, currtick, tickscale);
                     
                     //AddWideVtx(currtick, 2.0F, currtick, tickscale, asdi | (asdi << 8), 0xFF7F7F7F);
                 }
@@ -1964,8 +1964,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         }
         #endif
         
-        NoteNode* prevnote = 0;
-        NoteNode* currnote = VisibleNoteList;
+        NoteNode* __restrict prevnote = 0;
+        NoteNode* __restrict currnote = VisibleNoteList;
         
         #ifndef NORENDEROPT
         //loop over freeable notes first
@@ -1986,9 +1986,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             
             if(currnote->end > currtick) //note not finished yet
             {
-                NoteNode localnode = *currnote;
+                NoteNode* localnode = currnote;
                 prevnote = currnote;
-                currnote = localnode.next;
+                currnote = localnode->next;
                 
                 AddVtx(localnode, currtick, tickscale);
             }
@@ -2038,9 +2038,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         //loop over visible notes which don't require special processing
         while(currnote && currnote->start < toptick)
         {
-            NoteNode localnode = *currnote;
+            NoteNode* localnode = currnote;
             prevnote = currnote;
-            currnote = localnode.next;
+            currnote = localnode->next;
             
             AddVtx(localnode, currtick, tickscale);
         }
@@ -2050,11 +2050,11 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         {
             if(currnote->end > currtick)
             {
-                NoteNode localnode = *currnote;
+                NoteNode* localnode = currnote;
                 prevnote = currnote;
-                currnote = localnode.next;
+                currnote = localnode->next;
                 
-                if(localnode.start < toptick)
+                if(localnode->start < toptick)
                     AddVtx(localnode, currtick, tickscale);
                 
                 #ifdef KEYBOARD
