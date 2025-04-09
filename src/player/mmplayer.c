@@ -194,7 +194,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 }
                 
                 u8 swcmd = msg.cmd;
-#if 0
+#if 1
                 if(__builtin_expect(swcmd < 0xA0, 1))
                 {
                     if(__builtin_expect(swcmd >= 0x90, 1))
@@ -313,8 +313,11 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 cmdend:
                 
                 slep = *(ptrs++);
+                
                 if(__builtin_expect(!slep, 1))
+                {
                     continue;
+                }
                 
                 if(__builtin_expect(ptrs < ptre, 1))
                 {

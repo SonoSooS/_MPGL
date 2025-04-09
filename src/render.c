@@ -624,7 +624,7 @@ static int WINAPI LongMessage(DWORD dwMsg, LPCVOID ptr, DWORD len)
 */
 static int WINAPI dwEventCallback(DWORD note)
 {
-    if((u8)note >= 0xA0)
+    if(COMPILER_UNLIKELY((u8)note >= 0xA0))
         return 0;
     
     u32 uid = (u8)(note >> 8) | ((note & 0xF) << 8)
@@ -735,7 +735,7 @@ static int WINAPI dwEventCallback(DWORD note)
 #ifndef OLDDENSE
 static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float offsx, float offsr, const KCOLOR* colors)
 {
-    if(__builtin_expect(vtxidx == vertexsize, 0))
+    if(COMPILER_UNLIKELY(vtxidx >= vertexsize))
     {
         FlushToilet();
         //vtxidx = 0;
@@ -820,7 +820,7 @@ static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float 
         ck->quads[2] = (struct quadpart){offsr, origoffsy, color3};
         ck->quads[3] = (struct quadpart){offsr, origoffst, color3};
         
-        if(__builtin_expect(vtxidx == vertexsize, 0))
+        if(COMPILER_UNLIKELY(vtxidx >= vertexsize))
         {
             FlushToilet();
             //vtxidx = 0;
@@ -1000,7 +1000,7 @@ static __attribute__((noinline)) void AddVtx(const NoteNode* __restrict localnod
     float offsr;
     pianokey(&offsx, &offsr, localnode->uid);
     #else
-    DWORD rawoffs = localnode.uid & 0xFF;
+    DWORD rawoffs = localnode->uid & 0xFF;
     float offsx = rawoffs;
     float offsr = rawoffs + 1;
     #endif
@@ -1059,7 +1059,7 @@ static __attribute__((noinline)) void AddWideVtx(ULONGLONG start, float height, 
 #endif
 
 #if defined(PFACOLOR)
-static __attribute__((noinline)) KCOLOR HSV2RGB(float hue, float saturation, float value)
+static __attribute__((noinline)) DWORD HSV2RGB(float hue, float saturation, float value)
 {
     float Irgb = saturation * value;
     float m = value - Irgb;
@@ -1104,15 +1104,11 @@ static __attribute__((noinline)) KCOLOR HSV2RGB(float hue, float saturation, flo
             break;
     }
     
-    #ifndef HDR
     DWORD dwColor = 0;
     dwColor |= (BYTE)(((r + m) * 255.0F) + 0.5F) << 0;
     dwColor |= (BYTE)(((g + m) * 255.0F) + 0.5F) << 8;
     dwColor |= (BYTE)(((b + m) * 255.0F) + 0.5F) << 16;
     return dwColor;
-    #else
-    return (KCOLOR){ r + m, g + m, b + m, 1.0F };
-    #endif
 }
 #endif
 
@@ -1377,7 +1373,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         {
             DWORD ic = 3;
             
-            int col = 0xFF;
+            DWORD col = 0xFF;
             
         #ifdef PFACOLOR
             DWORD seeds[3];
@@ -2000,6 +1996,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                     prevnote->next = nn;
                     
                     NoteFree(currnote);
+                    
                     currnote = nn;
                     
                     continue;
@@ -2140,7 +2137,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             debugnode.start = debugtick;
             debugnode.end = debugtick + (PlayerReal->timediv >> 1) + (PlayerReal->timediv >> 2);
             
-            AddVtx(debugnode, currtick, tickscale);
+            AddVtx(&debugnode, currtick, tickscale);
             
             AddWideVtx((ULONGLONG)debugtick, 1.0F / 64.0F, currtick, tickscale, 0x7F, -1);
         }
@@ -2394,7 +2391,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         //printf("Drawn: %10llu | Desync: %10lli\n", notesdrawn, PlayerReal->RealTime - PlayerNotecatcher->RealTime);
         //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         //glDrawArrays(GL_TRIANGLES, 0, 3);
-        //glDrawElements(GL_TRIANGLES, 6 * vtxidx, GL_UNSIGNED_INT, indexes);s
+        //glDrawElements(GL_TRIANGLES, 6 * vtxidx, GL_UNSIGNED_INT, indexes);
         
         #ifndef GLTEXT
         if(notealloccount != currnotealloc)
