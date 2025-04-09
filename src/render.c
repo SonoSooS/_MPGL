@@ -317,7 +317,7 @@ int(WINAPI*kNPOriginal)(DWORD msg);
 void(WINAPI*kNSOriginal)(MMPlayer* syncplayer, DWORD dwDelta);
 static int WINAPI kNPIntercept(DWORD note)
 {
-    if(((BYTE)note & 0xF0) == 0x90 && (BYTE)(note >> 8))
+    if((((BYTE)note & 0xF0) == 0x90) && (BYTE)(note >> 16))
         currnote++;
     
     if(kNPOriginal)
