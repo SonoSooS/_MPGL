@@ -38,7 +38,7 @@ void* __attribute__((noinline)) GL_GetProcAddress(const char* name)
         //return err;
     }
     
-#if 1
+#if 0
     HANDLE currproc = GetCurrentProcess();
     MEMORY_BASIC_INFORMATION mbi;
     char namebuf[32];
