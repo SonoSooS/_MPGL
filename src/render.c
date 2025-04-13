@@ -371,7 +371,7 @@ static DWORD returnfailcount;
 static MMTick mmnotesync;
 #endif
 
-static void NoteReturn(MMPlayer* syncplayer, DWORD dwDelta)
+static void WINAPI NoteReturn(MMPlayer* syncplayer, DWORD dwDelta)
 {
     #ifdef DYNASCROLL
     if(dwDelta)

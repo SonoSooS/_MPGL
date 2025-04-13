@@ -7,7 +7,7 @@
 static const char* (WINAPI*glGetExtString)(void) = 0;
 static const char* (WINAPI*glGetArbString)(HDC dc) = 0;
 static HDC (WINAPI*glGetCurrentDC)(void) = 0;
-static int (*glSwapControl)(int) = 0;
+static int (WINAPI*glSwapControl)(int) = 0;
 
 int uglSupportsExt(const char* ext)
 {

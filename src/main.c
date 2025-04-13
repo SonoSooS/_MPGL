@@ -24,7 +24,7 @@ extern DWORD (WINAPI*mGetModuleBaseNameA)
     DWORD   nSize
 );
 
-int _VDSO_QueryInterruptTime(PULONGLONG _outtime)
+int WINAPI _VDSO_QueryInterruptTime(PULONGLONG _outtime)
 {
 #if defined(_WIN64) && 0
     *_outtime = *(PULONGLONG)0x7FFE0008;

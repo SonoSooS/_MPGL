@@ -26,6 +26,7 @@ void* __attribute__((noinline)) GL_GetProcAddress(const char* name)
     // why can't some drivers decide what to return as invalid value???
     if(!(ptr >> 12) || (ptr >> 12) == ((~0) >> 12))
     {
+        //printf("! Invalid GL proc address %p for %s, trying opengl32...\n", ptr, name);
         // try fish out the missing function from the stock DLL (already a lost cause though)
         ptr = (size_t)GetProcAddress(GetModuleHandleA("opengl32"), name);
     }
@@ -37,9 +38,8 @@ void* __attribute__((noinline)) GL_GetProcAddress(const char* name)
         //return err;
     }
     
-    return (void*)ptr;
-    
-    /*HANDLE currproc = GetCurrentProcess();
+#if 1
+    HANDLE currproc = GetCurrentProcess();
     MEMORY_BASIC_INFORMATION mbi;
     char namebuf[32];
     
@@ -49,19 +49,21 @@ void* __attribute__((noinline)) GL_GetProcAddress(const char* name)
         
         if(mGetModuleBaseNameA(currproc, mod, namebuf, sizeof(namebuf)))
         {
-            printf("OK - %s (%016X) in %s\n", name, ptr, namebuf);
+            printf("OK - in %s - (%p) %s\n", namebuf, ptr, name);
             return (void*)ptr;
         }
     }
     
     printf("OK - %s (%016X)\n", name, ptr);
-    return (void*)ptr;*/
+#endif
+    
+    return (void*)ptr;
 }
 
 extern void(WINAPI*glAAADummyFunc)(void);
 extern void(WINAPI*glZZZDummyFuncEnd)(void);
 
-int __attribute__((optimize("Os"))) GL_LinkFunctions()
+int __attribute__((optimize("Os"))) GL_LinkFunctions(void)
 {
     int cnt = 0;
     
@@ -85,10 +87,9 @@ int __attribute__((optimize("Os"))) GL_LinkFunctions()
     }
     
     if(glGetString)
-    {
         printf("OpenGL version: %s\n", glGetString(GL_VERSION));
-    }
-    else puts("Unknown GL version - no glGetString... oof");
+    else
+        puts("Unknown GL version - no glGetString... oof");
     
     return cnt;
 }
@@ -96,7 +97,7 @@ int __attribute__((optimize("Os"))) GL_LinkFunctions()
 
 void(WINAPI*glAAADummyFunc)(void) = 0;
 
-#define GLDEFINE(proc, name) proc name = (const void*)(const char* const) #name ;
+#define GLDEFINE(proc, name) proc name = (proc)(void*)(const char* const) #name ;
 #include "core.h"
 #undef GLDEFINE
 

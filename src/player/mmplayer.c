@@ -57,7 +57,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     
     player->done = false;
     
-    extern int _VDSO_QueryInterruptTime(PULONGLONG _outtime);
+    extern int WINAPI _VDSO_QueryInterruptTime(PULONGLONG _outtime);
     int(WINAPI*NtDelayExecution)(int doalert, INT64* timeptr) = 0;
     int(WINAPI*NtQuerySystemTime)(ULONGLONG* timeptr) = 0;
     
@@ -367,7 +367,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
             
             track_merge:
 #ifndef MODE_BH
-            merge_tracks(trk);
+            tracks_merge(trk);
 #else
             
 #endif
