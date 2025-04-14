@@ -339,7 +339,7 @@ static int WINAPI kNPIntercept(DWORD note)
         return 0;
 }
 
-static void kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
+static void WINAPI kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
 {
     struct histogram* __restrict hhist = hist + (histwrite++);
     if(histwrite == (DWORD)1e7)
