@@ -194,7 +194,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 }
                 
                 u8 swcmd = msg.cmd;
-#if 1
+#ifdef NO_ONEKEY
                 if(__builtin_expect(swcmd < 0xA0, 1))
                 {
                     if(__builtin_expect(swcmd >= 0x90, 1))

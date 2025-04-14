@@ -637,7 +637,13 @@ static int WINAPI dwEventCallback(DWORD note)
     
     NoteNode* __restrict node = ActiveNoteList[uid];
     
-    if((note & 0x10) && ((note >> 16) & 0xFF))
+    if
+    (
+        (note & 0x10)
+#ifdef NO_ZEROKEY
+        && ((note >> 16) & 0xFF)
+#endif
+    )
     {
         #ifndef BUGFIXTEST
         if(node)
