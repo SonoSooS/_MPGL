@@ -136,6 +136,9 @@ static KCOLOR color_blacken2(KCOLOR color)
 #ifdef TEXTNPS
 struct histogram* hist;
 u64 notecounter;
+#ifndef NO_ZEROKEY
+u64 paincounter;
+#endif
 #endif
 
 
@@ -311,14 +314,24 @@ MMTick histsum = 0;
 MMTick histdelay = 0;
 MMTick onehztimer = 0;
 u64 currnote = 0;
+#ifndef NO_ZEROKEY
+u64 painnote = 0;
+#endif
 u64 currnps = 0;
 
 int(WINAPI*kNPOriginal)(DWORD msg);
 void(WINAPI*kNSOriginal)(MMPlayer* syncplayer, DWORD dwDelta);
 static int WINAPI kNPIntercept(DWORD note)
 {
-    if((((BYTE)note & 0xF0) == 0x90) && (BYTE)(note >> 16))
-        currnote++;
+    if((((BYTE)note & 0xF0) == 0x90))
+    {
+        if((BYTE)(note >> 16))
+            currnote++;
+#ifndef NO_ZEROKEY
+        else
+            painnote++;
+#endif
+    }
     
     if(kNPOriginal)
         return kNPOriginal(note);
@@ -337,6 +350,10 @@ static void kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
     
     currnps += currnote;
     notecounter += currnote;
+#ifndef NO_ZEROKEY
+    paincounter += painnote;
+    painnote = 0;
+#endif
     
     struct histogram* __restrict ihist;
     

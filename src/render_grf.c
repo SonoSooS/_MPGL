@@ -48,6 +48,9 @@ extern size_t midisize;
 #ifdef TEXTNPS
 extern struct histogram* hist;
 extern ULONGLONG notecounter;
+#ifndef NO_ZEROKEY
+extern ULONGLONG paincounter;
+#endif
 #endif
 
 #ifdef WMA_SIZE
@@ -233,9 +236,9 @@ void grfDrawFontOverlay(void)
     char buf[256];
     
     #ifndef TEXTNEAT
-    const int32_t ybase = 0;
+    int32_t ybase = 0;
     #else
-    const int32_t ybase = 70;
+    int32_t ybase = 70;
     #endif
     
     #ifndef TEXTCUSTOM1
@@ -254,6 +257,11 @@ void grfDrawFontOverlay(void)
         #define TEXTLOFFS(offs) (TEXTL + offs)
     #endif
     
+    #ifndef NO_ZEROKEY
+    if(paincounter)
+        ybase -= 4;
+    #endif
+    
     #ifdef TEXTNPS
     textlen = sprintf(buf, "%s N/s ", _commanumberU(currnps));
     grfDrawFontString(TEXTROFFS(2), ybase - 2, 2, -1, buf);
@@ -261,12 +269,29 @@ void grfDrawFontOverlay(void)
     
     #if !defined(TEXTCUSTOM1) || 1
     textlen = sprintf(buf, "%s NoS ", _commanumberU(drawnotes));
-    grfDrawFontString(TEXTROFFS(2), ybase - /*0*/ 4, 2, -1, buf);
+    grfDrawFontString(TEXTROFFS(2), ybase - 4, 2, -1, buf);
     #endif
     
     #ifdef TEXTNPS
     textlen = sprintf(buf, " %s notes", _commanumberU(notecounter));
-    grfDrawFontString(TEXTR, ybase - 0, 2, -1, buf);
+    #ifndef NO_ZEROKEY
+    if(paincounter)
+    {
+        grfDrawFontString(TEXTR, ybase + 2, 2, -1, buf);
+        
+        textlen = sprintf(buf, " %s pain ", _commanumberU(paincounter));
+        grfDrawFontString(TEXTR, ybase - 0, 2, -1, buf);
+        textlen = sprintf(buf, " %s total", _commanumberU(paincounter + notecounter));
+        grfDrawFontString(TEXTR, ybase + 4, 2, -1, buf);
+    }
+    else
+    #endif
+        grfDrawFontString(TEXTR, ybase - 0, 2, -1, buf);
+    #endif
+    
+    #ifndef NO_ZEROKEY
+    if(paincounter)
+        ybase += 4;
     #endif
     
     #ifdef WMA_SIZE
