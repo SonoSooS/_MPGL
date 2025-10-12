@@ -74,6 +74,22 @@ static ULONGLONG realsync = 0;
 #ifndef HEADLESS
 extern DWORD WINAPI RenderThread(PVOID lpParameter);
 
+#ifdef PROFI_ENABLE
+#include "profi.h"
+
+__attribute__((noinline)) DWORD WINAPI _RenderThreadProfiHook2(PVOID lpParameter)
+{
+    return RenderThread(lpParameter);
+}
+
+__attribute__((noinline)) __attribute__((no_instrument_function)) DWORD WINAPI _RenderThreadProfiHook(PVOID lpParameter)
+{
+    profi_enable();
+    return _RenderThreadProfiHook2(lpParameter);
+}
+#endif
+
+
 static HGLRC CreateGLContext(HWND wnd, HDC dc)
 {
     HWND tempwnd = CreateWindowExW(windowexstyle, L"STATIC", L"MPGL Test Window " DATETIME, windowstyle, 0, 0, 1, 1, 0, 0, GetModuleHandleA(0), 0);
@@ -241,7 +257,13 @@ static LRESULT CALLBACK WindowProc(HWND wnd, UINT uMsg, WPARAM wParam, LPARAM lP
                 SetWindowPos(wnd, 0, calc.left, calc.top, calc.right, calc.bottom, SWP_FRAMECHANGED);
             }
             
-            CreateThread(0, 0x4000, RenderThread, ((LPCREATESTRUCTW)lParam)->lpCreateParams, 0, 0);
+            CreateThread(0, 0x4000,
+        #ifdef PROFI_ENABLE
+                _RenderThreadProfiHook,
+        #else
+                RenderThread,
+        #endif
+                ((LPCREATESTRUCTW)lParam)->lpCreateParams, 0, 0);
             
             return cwresult;
         }
@@ -605,8 +627,12 @@ DWORD (WINAPI*mGetModuleBaseNameA)
     DWORD   nSize
 );
 
-int main(int argc, char** argv)
+__attribute__((no_instrument_function)) int main(int argc, char** argv)
 {
+#ifdef PROFI_ENABLE
+    profi_disable();
+#endif
+    
 #ifdef _M_IX86
     //*((HANDLE*)((BYTE*)(((BYTE*)NtCurrentTeb()) + 0x30) + 0x18)) = HeapCreate(0, 0, 0);
 #endif

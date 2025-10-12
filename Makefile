@@ -56,6 +56,10 @@ CFLAGS	:=	-g -Wall -O2 -ffast-math -ffunction-sections -fdata-sections \
 			$(ARCH) \
 			-Wno-format
 
+ifeq ($(strip $(PROFI)),1)
+CFLAGS += -g -Og -finstrument-functions -DPROFI_ENABLE
+endif
+
 POSTFIX	:= exe
 
 CFLAGS	+=	$(INCLUDE) -DDATETIME=\"$(DT)\"

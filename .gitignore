@@ -2,3 +2,5 @@
 /out
 /*.exe
 /*.7z
+/src/profi.c
+/src/profi.h
