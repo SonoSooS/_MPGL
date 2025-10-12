@@ -18,6 +18,7 @@
 #define TRACKID
 #define PFACOLOR
 #define PFAKEY
+//#define MMVKEY
 //#define ROUNDEDGE
 //#define TRANSFORM
 #define PIANOKEYS

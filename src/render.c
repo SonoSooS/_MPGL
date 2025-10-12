@@ -861,16 +861,36 @@ static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float 
         offsx += widthmagic;
         offsr -= widthmagic;
         
+    #ifdef MMVKEY
+        ck->quads[0] = (struct quadpart){offsx, offst, color2};
+        ck->quads[1] = (struct quadpart){offsx, offsy, color1};
+        ck->quads[2] = (struct quadpart){offsr, offsy, color1};
+        ck->quads[3] = (struct quadpart){offsr, offst, color2};
+    #else
         ck->quads[0] = (struct quadpart){offsx, offst, color1};
         ck->quads[1] = (struct quadpart){offsx, offsy, color1};
         ck->quads[2] = (struct quadpart){offsr, offsy, color2};
         ck->quads[3] = (struct quadpart){offsr, offst, color2};
+    #endif
         
+    #else
+        #ifdef PFAKEY
+        KCOLOR color2 = colors[1];
+        #else
+        KCOLOR color2 = color1;
+        #endif
+    
+    #ifdef MMVKEY
+        ck->quads[0] = (struct quadpart){offsx, offst, color2};
+        ck->quads[1] = (struct quadpart){offsx, offsy, color1};
+        ck->quads[2] = (struct quadpart){offsr, offsy, color1};
+        ck->quads[3] = (struct quadpart){offsr, offst, color2};
     #else
         ck->quads[0] = (struct quadpart){offsx, offst, color1};
         ck->quads[1] = (struct quadpart){offsx, offsy, color1};
-        ck->quads[2] = (struct quadpart){offsr, offsy, color1/*color2*/};
-        ck->quads[3] = (struct quadpart){offsr, offst, color1/*color2*/};
+        ck->quads[2] = (struct quadpart){offsr, offsy, color2};
+        ck->quads[3] = (struct quadpart){offsr, offst, color2};
+    #endif
     #endif
         
     #ifdef OUTLINE
@@ -979,10 +999,17 @@ static void AddRawVtx(float offsy, float offst, float offsx, float offsr, const 
     #endif
         KCOLOR color2 = colors[1];
         
+    #ifdef MMVKEY
+        ck->quads[0] = (struct quadpart){offsx, offst, color2};
+        ck->quads[1] = (struct quadpart){offsx, offsy, color1};
+        ck->quads[2] = (struct quadpart){offsr, offsy, color1};
+        ck->quads[3] = (struct quadpart){offsr, offst, color2};
+    #else
         ck->quads[0] = (struct quadpart){offsx, offst, color1};
         ck->quads[1] = (struct quadpart){offsx, offsy, color1};
         ck->quads[2] = (struct quadpart){offsr, offsy, color2};
         ck->quads[3] = (struct quadpart){offsr, offst, color2};
+    #endif
         
     #ifdef OUTLINE
     }
