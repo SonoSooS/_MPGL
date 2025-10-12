@@ -226,7 +226,7 @@ static LRESULT CALLBACK WindowProc(HWND wnd, UINT uMsg, WPARAM wParam, LPARAM lP
             
             LRESULT cwresult = DefWindowProcW(wnd, uMsg, wParam, lParam);
             
-            //fuck lose10 for breaking a such simple thing as AdjustWindowRect Âª_Âª
+            //fuck lose10 for breaking a such simple thing as AdjustWindowRect ª_ª
             
             RECT wndrect;
             RECT clirect;
@@ -619,6 +619,11 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
     return 0;
 }
 
+static void WINAPI PlayerSyncFunc(MMPlayer* player, DWORD deltaTicks)
+{
+    player->KShortMsg(~0);
+}
+
 DWORD (WINAPI*mGetModuleBaseNameA)
 (
     HANDLE  hProcess,
@@ -626,6 +631,8 @@ DWORD (WINAPI*mGetModuleBaseNameA)
     LPSTR   lpBaseName,
     DWORD   nSize
 );
+
+DWORD gLayers = 0;
 
 __attribute__((no_instrument_function)) int main(int argc, char** argv)
 {
@@ -707,12 +714,11 @@ __attribute__((no_instrument_function)) int main(int argc, char** argv)
         {
             puts("Reading layers");
             
-            DWORD layers = 4;
-            fread(&layers, 1, 4, f);
+            fread(&gLayers, 1, 4, f);
             fclose(f);
             
-            printf("Layers for syndrv: %i\n", layers);
-            KDLayers(layers);
+            printf("Layers for syndrv: %i\n", gLayers);
+            KDLayers(gLayers);
         }
     }
     
@@ -761,7 +767,20 @@ __attribute__((no_instrument_function)) int main(int argc, char** argv)
 #ifndef TRIPLEO
     do
     {
-        puts("Checking for KDMAPI");
+        puts("Checking for synth capabilities");
+        
+        if(gLayers)
+        {
+            void(WINAPI*KDFlags)(DWORD) = (void*)GetProcAddress(ks, "syninit_SetFlagsKDM");
+            if(KDFlags)
+            {
+                puts("Disabling syndrv KDMAPI thread");
+                //KDFlags(1);
+                //player->KSyncFunc = PlayerSyncFunc;
+            }
+        }
+        
+        
         
         BOOL(WINAPI*KSInit)(void) = (void*)GetProcAddress(ks, "IsKDMAPIAvailable");
         if(!KSInit)
