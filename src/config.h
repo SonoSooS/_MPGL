@@ -6,10 +6,10 @@
 //#define TRIPLEO
 //#define NOBUF
 //#define FULLSCREEN
-//#define MIDI_MMIO
+#define MIDI_MMIO
 //#define HEADLESS
-#define NO_ONEKEY
-//#define NO_ZEROKEY
+//#define NO_ONEKEY
+#define NO_ZEROKEY
 
 //#define MODE_BH
 
