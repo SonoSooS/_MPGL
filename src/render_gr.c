@@ -25,6 +25,7 @@ void grInstallShader(void)
     GLuint vsh = glCreateShader(GL_VERTEX_SHADER);
     GLuint psh = glCreateShader(GL_FRAGMENT_SHADER);
     
+#pragma region Shader VSH
     
     const char* shadera =
         "#version 330 core\n"
@@ -141,6 +142,10 @@ void grInstallShader(void)
         "   trigpos = vtxpos.xy;\n"
         "}\n"
         ;
+        
+#pragma endregion
+    
+#pragma region Shader FSH
 
     #if !defined(HDR) || defined(GLOWEDGE) || defined(ROUNDEDGE)
     const char* shaderb =
@@ -422,30 +427,125 @@ vec3 rotat_yuv(vec3 col, float y, float uv, float rota)\
     #endif
     ;
     
+#pragma endregion
+    
     
     GLint stat = 0;
     
-    glShaderSource(vsh, 1, &shadera, NULL);
+    char* sh_vsh = NULL;
+    char* sh_fsh = NULL;
+    size_t size_vsh = 0;
+    size_t size_fsh = 0;
+    
+    FILE* file_in_vsh = fopen("MPGL_GR_VSH.vsh", "rb");
+    FILE* file_in_fsh = fopen("MPGL_GR_FSH.fsh", "rb");
+    
+    if(file_in_fsh && file_in_vsh)
+    {
+        fseek(file_in_vsh, 0, SEEK_END);
+        fseek(file_in_fsh, 0, SEEK_END);
+        
+        size_vsh = ftell(file_in_vsh);
+        size_fsh = ftell(file_in_fsh);
+        
+        fseek(file_in_vsh, 0, SEEK_SET);
+        fseek(file_in_fsh, 0, SEEK_SET);
+        
+        // Zero-size malloc is impl-defined, so
+        //  don't play with fire, over-allocate
+        sh_vsh = malloc(size_vsh + 1);
+        sh_fsh = malloc(size_fsh + 1);
+        
+        if(sh_vsh && sh_fsh)
+        {
+            sh_vsh[size_vsh] = '\0';
+            sh_fsh[size_fsh] = '\0';
+            
+            if(fread(sh_vsh, 1, size_vsh, file_in_vsh) != size_vsh)
+            {
+                free(sh_vsh);
+                sh_vsh = NULL;
+            }
+            else if(fread(sh_fsh, 1, size_fsh, file_in_fsh) != size_fsh)
+            {
+                free(sh_fsh);
+                sh_fsh = NULL;
+            }
+            else
+            {
+                puts("Successfully loaded custom shaders");
+            }
+        }
+        else
+        {
+            puts("Failed to load custom shaders: memory allocation failure");
+        }
+    }
+    else if(file_in_fsh || file_in_vsh)
+    {
+        puts("Found custom shaders, but failed to open all");
+    }
+    
+    if(file_in_vsh)
+    {
+        fclose(file_in_vsh);
+        file_in_vsh = NULL;
+    }
+    
+    if(file_in_fsh)
+    {
+        fclose(file_in_fsh);
+        file_in_fsh = NULL;
+    }
+    
+    if(sh_vsh && sh_fsh)
+    {
+        const char sh_header[] =
+        "#version 130 core\r\n" // GLSL 3.0
+        "#line 0 1\r\n"         // Enable 2nd file file numbers
+        ;
+        
+        // char[] = literal; should include the null-terminator in the array,
+        //  so subtract one to exclude it
+        GLint strlen_header = sizeof(sh_header) - 1;
+        
+        const char* sh_source_vsh[2] = {sh_header, sh_vsh};
+        const char* sh_source_fsh[2] = {sh_header, sh_fsh};
+        GLint sh_length_vsh[2] = {-1, size_vsh};
+        GLint sh_length_fsh[2] = {-1, size_fsh};
+        
+        glShaderSource(vsh, 2, sh_source_vsh, sh_length_vsh);
+        glShaderSource(psh, 2, sh_source_fsh, sh_length_fsh);
+        
+        free(sh_vsh);
+        free(sh_fsh);
+    }
+    else
+    {
+        glShaderSource(vsh, 1, &shadera, NULL);
+        
+        #if defined(HDR) && !defined(GLOWEDGE) && !defined(ROUNDEDGE)
+        #ifndef TIMI_CAPTURE
+        if(!uglSupportsExt("WGL_EXT_framebuffer_sRGB"))
+        #endif
+        {
+            shaderb[1] =
+            //"   outcolor = vec4(pow(outcolor.xyz / (outcolor.xyz + vec3(1.0F)), vec3(1.1F)), outcolor.w);\n"
+            "   outcolor = vec4(pow(outcolor.xyz, vec3(0.5F)), outcolor.w);\n"
+            //"\n"
+            ;
+        }
+        glShaderSource(psh, 3, shaderb, NULL);
+        #else
+        glShaderSource(psh, 1, &shaderb, NULL);
+        #endif
+    }
+    
     glCompileShader(vsh);
     glGetShaderiv(vsh, GL_COMPILE_STATUS, &stat);
     //if(stat != GL_TRUE)
         grhPrintShaderInfoLog(vsh);
     
-    #if defined(HDR) && !defined(GLOWEDGE) && !defined(ROUNDEDGE)
-    #ifndef TIMI_CAPTURE
-    if(!uglSupportsExt("WGL_EXT_framebuffer_sRGB"))
-    #endif
-    {
-        shaderb[1] =
-        //"   outcolor = vec4(pow(outcolor.xyz / (outcolor.xyz + vec3(1.0F)), vec3(1.1F)), outcolor.w);\n"
-        "   outcolor = vec4(pow(outcolor.xyz, vec3(0.5F)), outcolor.w);\n"
-        //"\n"
-        ;
-    }
-    glShaderSource(psh, 3, shaderb, NULL);
-    #else
-    glShaderSource(psh, 1, &shaderb, NULL);
-    #endif
     glCompileShader(psh);
     glGetShaderiv(psh, GL_COMPILE_STATUS, &stat);
     //if(stat != 1)
