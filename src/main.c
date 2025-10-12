@@ -24,7 +24,7 @@ extern DWORD (WINAPI*mGetModuleBaseNameA)
     DWORD   nSize
 );
 
-int WINAPI _VDSO_QueryInterruptTime(PULONGLONG _outtime)
+WINAPI int _VDSO_QueryInterruptTime(PULONGLONG _outtime)
 {
 #if defined(_WIN64) && 0
     *_outtime = *(PULONGLONG)0x7FFE0008;
@@ -353,7 +353,7 @@ static LRESULT CALLBACK WindowProc(HWND wnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
 #ifdef TRIPLEO
 
-static int dwNoMessage(DWORD dwParam1)
+static WINAPI int dwNoMessage(DWORD dwParam1)
 {
     return 0;
 }
@@ -548,6 +548,11 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
     }
     
     player->tracks = calloc(trkcnt + 1, sizeof(MMTrack));
+    if(!player->tracks)
+    {
+        puts("Failed to allocate tracks array");
+        return 0;
+    }
     ZeroMemory(player->tracks, sizeof(MMTrack) * (trkcnt + 1));
     
     buf = ptr + __builtin_bswap32(*(DWORD*)(ptr + 4)) + 8;

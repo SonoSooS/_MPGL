@@ -1765,7 +1765,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     extern int _VDSO_QueryInterruptTime(PULONGLONG _outtime);
     //int(WINAPI*NtQuerySystemTime)(ULONGLONG* timeptr) = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtQuerySystemTime");
-    int(WINAPI*NtQuerySystemTime)(ULONGLONG* timeptr) = (void*)_VDSO_QueryInterruptTime;
+    int(WINAPI*NtQuerySystemTime)(PULONGLONG timeptr) = _VDSO_QueryInterruptTime;
     
     ULONGLONG prevtime;
     NtQuerySystemTime(&prevtime);

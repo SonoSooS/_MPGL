@@ -40,9 +40,11 @@ export DT := $(shell date +"%Y/%m/%d")
 
 ifeq ($(strip $(OVERARCH)),)
 ifeq ($(strip $(WOW64)),)
-ARCH	:= -m64 -march=corei7 -mtune=corei7
+#ARCH	:= -m64 -march=corei7 -mtune=corei7
+#ARCH	:= -m64 -march=core2
+ARCH	:= -m64 -march=core2 -mtune=corei7
 else
-ARCH	:= -m32 -march=atom -mtune=atom
+ARCH	:= -m32 -march=core2 -mtune=core2
 endif
 else
 ARCH	:= $(OVERARCH)

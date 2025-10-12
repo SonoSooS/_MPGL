@@ -59,7 +59,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     
     extern int WINAPI _VDSO_QueryInterruptTime(PULONGLONG _outtime);
     int(WINAPI*NtDelayExecution)(int doalert, INT64* timeptr) = 0;
-    int(WINAPI*NtQuerySystemTime)(ULONGLONG* timeptr) = 0;
+    int(WINAPI*NtQuerySystemTime)(PULONGLONG timeptr) = 0;
     
     NtDelayExecution = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtDelayExecution");
     //NtQuerySystemTime = (void*)GetProcAddress(GetModuleHandle("ntdll"), "NtQuerySystemTime");
@@ -138,7 +138,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     
     NtQuerySystemTime(&tickdiff);
     
-    int(WINAPI*KShortMsg)(DWORD msg) = player->KShortMsg;
+    cbMMShortMsg KShortMsg = player->KShortMsg;
     
     for(;;)
     {

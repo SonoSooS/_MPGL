@@ -17,6 +17,37 @@ static void hex32(DWORD wrd)
     printf("%08X", wrd);
 }
 
+static void wriptra(size_t ptr)
+{
+    HANDLE currproc = GetCurrentProcess();
+    HMODULE mod;
+    char namebuf[32];
+    MEMORY_BASIC_INFORMATION mbi;
+    
+    wriptr(ptr);
+    
+    if(!VirtualQuery((LPCVOID)ptr, &mbi, sizeof(mbi)))
+        return;
+    
+    mod = (HMODULE)mbi.AllocationBase;
+    
+    namebuf[0] = '\0';
+    if(!mGetModuleBaseNameA || !mGetModuleBaseNameA(currproc, mod, namebuf, sizeof(namebuf)))
+    {
+        namebuf[0] = '?';
+        namebuf[1] = '?';
+        namebuf[2] = '?';
+        namebuf[3] = '\0';
+    }
+    
+    namebuf[31] = 0;
+    writecon(" (");
+    writecon(namebuf);
+    writecon("+");
+    hex32((DWORD)((BYTE*)ptr - (BYTE*)mod));
+    writecon(")");
+}
+
 static LONG WINAPI crashhandler(LPEXCEPTION_POINTERS exc)
 {
     //stdconout = CreateFileA("_mmcrash.log", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -24,38 +55,20 @@ static LONG WINAPI crashhandler(LPEXCEPTION_POINTERS exc)
 #ifdef _M_IX86
     BYTE* stacktrace[16];
     
-    DWORD ret = RtlCaptureStackBackTrace(0, (sizeof(stacktrace) / sizeof(size_t)), (void**)stacktrace, 0);
+    DWORD ret = 0; //RtlCaptureStackBackTrace(0, (sizeof(stacktrace) / sizeof(size_t)), (void**)stacktrace, 0);
 #else
     BYTE* stacktrace[62];
     DWORD ret = RtlCaptureStackBackTrace(7, (sizeof(stacktrace) / sizeof(size_t)) - 7, (void**)stacktrace, 0);
 #endif
     
-    HANDLE currproc = GetCurrentProcess();
-    MEMORY_BASIC_INFORMATION mbi;
-    char namebuf[32];
+    writecon("\n  ========[Stacktrace]========\n ");
     
     if(ret)
     {
-        writecon("\n  ========[Stacktrace]========\n ");
         while(ret--)
         {
             writecon("\n  - ");
-            wriptr((size_t)stacktrace[ret]);
-            
-            if(!VirtualQuery(stacktrace[ret], &mbi, sizeof(mbi)))
-                continue;
-            
-            HMODULE mod = (HMODULE)mbi.AllocationBase;
-            
-            if(!mGetModuleBaseNameA(currproc, mod, namebuf, sizeof(namebuf)))
-                continue;
-            
-            namebuf[31] = 0;
-            writecon(" (");
-            writecon(namebuf);
-            writecon("+");
-            hex32((DWORD)(stacktrace[ret] - (BYTE*)mod));
-            writecon(")");
+            wriptra((size_t)stacktrace[ret]);
         }
         writecon("\n ");
     }
@@ -66,9 +79,24 @@ static LONG WINAPI crashhandler(LPEXCEPTION_POINTERS exc)
     
 #ifdef _M_IX86
     writecon("\n Stack values:");
-    writecon("\n    "); wriptr(*(((size_t*)exc->ContextRecord->Esp) -1));
-    writecon("\n    "); wriptr(*(((size_t*)exc->ContextRecord->Esp)   ));
-    writecon("\n    "); wriptr(*(((size_t*)exc->ContextRecord->Esp) +1));
+    {
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) -9));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) -8));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) -7));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) -6));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) -5));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) -4));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) -3));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) -2));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) -1));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp)   )); writecon(" <--");
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) +1));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) +2));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) +3));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) +4));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) +5));
+        writecon("\n    "); wriptra(*(((size_t*)exc->ContextRecord->Esp) +6));
+    }
 #endif
     
     writecon("\n\n  ========[Exception]========\n ");
@@ -101,7 +129,7 @@ static LONG WINAPI crashhandler(LPEXCEPTION_POINTERS exc)
             arre(EXCEPTION_PRIV_INSTRUCTION);
             arre(EXCEPTION_SINGLE_STEP);
             arre(EXCEPTION_STACK_OVERFLOW);
-            default: writecon("unknown "); hex32(exc->ExceptionRecord->ExceptionCode);
+            default: writecon("unknown "); hex32(exc->ExceptionRecord->ExceptionCode); break;
         }
         writecon("\n  Address: "); wriptr((size_t)exc->ExceptionRecord->ExceptionAddress);
         
@@ -126,25 +154,8 @@ static LONG WINAPI crashhandler(LPEXCEPTION_POINTERS exc)
     writecon("\n  ========[Regdump]========\n ");
     
 #ifdef _M_AMD64
-    writecon("\n PC : "); wriptr(exc->ContextRecord->Rip);
-    do
-    {
-        if(!VirtualQuery((BYTE*)exc->ContextRecord->Rip, &mbi, sizeof(mbi)))
-            continue;
-        
-        HMODULE mod = (HMODULE)mbi.AllocationBase;
-        
-        if(!mGetModuleBaseNameA(currproc, mod, namebuf, sizeof(namebuf)))
-            continue;
-        
-        namebuf[31] = 0;
-        writecon("   (");
-        writecon(namebuf);
-        writecon("+");
-        hex32((DWORD)((BYTE*)exc->ContextRecord->Rip - (BYTE*)mod));
-        writecon(")");
-    }
-    while(0);
+    writecon("\n PC : "); wriptra(exc->ContextRecord->Rip);
+    
     writecon("\n RAX: "); wriptr(exc->ContextRecord->Rax);
     writecon("   RCX: "); wriptr(exc->ContextRecord->Rcx);
     writecon("   RDX: "); wriptr(exc->ContextRecord->Rdx);
@@ -173,25 +184,8 @@ static LONG WINAPI crashhandler(LPEXCEPTION_POINTERS exc)
     writecon("   LEF: "); wriptr(exc->ContextRecord->LastExceptionFromRip);
 #else
 #ifdef _M_ARM64
-    writecon("\n PC : "); wriptr(exc->ContextRecord->Pc);
-    do
-    {
-        if(!VirtualQuery((BYTE*)exc->ContextRecord->Pc, &mbi, sizeof(mbi)))
-            continue;
-        
-        HMODULE mod = (HMODULE)mbi.AllocationBase;
-        
-        if(!mGetModuleBaseNameA(currproc, mod, namebuf, sizeof(namebuf)))
-            continue;
-        
-        namebuf[31] = 0;
-        writecon("   (");
-        writecon(namebuf);
-        writecon("+");
-        hex32((DWORD)((BYTE*)exc->ContextRecord->Pc - (BYTE*)mod));
-        writecon(")");
-    }
-    while(0);
+    writecon("\n PC : "); wriptra(exc->ContextRecord->Pc);
+    
     writecon("   LR : "); wriptr(exc->ContextRecord->Lr);
     writecon("   SP : "); wriptr(exc->ContextRecord->Sp);
     writecon("\n FP : "); wriptr(exc->ContextRecord->Fp);
@@ -229,26 +223,8 @@ static LONG WINAPI crashhandler(LPEXCEPTION_POINTERS exc)
     writecon("\n X28: "); wriptr(exc->ContextRecord->X[28]);
 #else
 #ifdef _M_IX86
-    writecon("\n PC : "); wriptr(exc->ContextRecord->Eip);
-    if(exc->ContextRecord->Eip)
-    do
-    {
-        if(!VirtualQuery((BYTE*)exc->ContextRecord->Eip, &mbi, sizeof(mbi)))
-            continue;
-        
-        HMODULE mod = (HMODULE)mbi.AllocationBase;
-        
-        if(!mGetModuleBaseNameA(currproc, mod, namebuf, sizeof(namebuf)))
-            continue;
-        
-        namebuf[31] = 0;
-        writecon("   (");
-        writecon(namebuf);
-        writecon("+");
-        hex32((DWORD)((BYTE*)exc->ContextRecord->Eip - (BYTE*)mod));
-        writecon(")");
-    }
-    while(0);
+    writecon("\n PC : "); wriptra(exc->ContextRecord->Eip);
+    
     writecon("\n EDI: "); wriptr(exc->ContextRecord->Edi);
     writecon("   ESI: "); wriptr(exc->ContextRecord->Esi);
     writecon("\n EBX: "); wriptr(exc->ContextRecord->Ebx);
