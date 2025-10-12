@@ -116,23 +116,24 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     
 #ifdef MODE_BH
     uint32_t trk_cnt = player->TrackCount;
-    bh* trk_lst = malloc(bh_c(trk_cnt));
-    bh_ct(trk_lst, trk_cnt);
+    bheap* trk_lst = malloc(bheap_alloc_size(trk_cnt));
+    trk_lst->count = 0;
+    trk_lst->size = trk_cnt;
     MMTrack* *trk_ret = malloc(trk_cnt * sizeof(MMTrack*));
     uint32_t trk_ret_cnt = 0;
     
     {
         MMTrack* __restrict trk2 = player->tracks;
-        uint32_t e = bh_s(trk_lst);
+        uint32_t e = bheap_add_begin(trk_lst);
         while(trk2 < trk)
         {
             if(!trk2->ptrs)
                 break;
             
-            bh_a(trk_lst, trk2);
+            bheap_add(trk_lst, trk2);
             ++trk2;
         }
-        bh_q(trk_lst, e);
+        bheap_add_end(trk_lst, e);
     }
 #endif
     
@@ -160,7 +161,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 continue;
             }
 #else
-            MMTrack** h = bh_n(trk_lst);
+            MMTrack** h = bheap_peek(trk_lst);
             if(h)
                 trk = *h;
             else
@@ -171,7 +172,8 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
             else
                 break;
             
-            bh_d(trk_lst, NULL);
+            
+            bheap_pop(trk_lst, NULL);
 #endif
             
             player->CurrentTrack = trk;
@@ -405,14 +407,14 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
         }
 #else
         
-        uint32_t lst_res = bh_s(trk_lst);
+        uint32_t lst_res = bheap_add_begin(trk_lst);
         for(uint32_t i = 0; i < trk_ret_cnt; ++i)
-            bh_a(trk_lst, trk_ret[i]);
+            bheap_add(trk_lst, trk_ret[i]);
         trk_ret_cnt = 0;
-        bh_q(trk_lst, lst_res);
+        bheap_add_end(trk_lst, lst_res);
         
         {
-            MMTrack** e = bh_n(trk_lst);
+            MMTrack** e = bheap_peek(trk_lst);
             if(!e)
                 break;
             
