@@ -226,7 +226,7 @@ static LRESULT CALLBACK WindowProc(HWND wnd, UINT uMsg, WPARAM wParam, LPARAM lP
             
             LRESULT cwresult = DefWindowProcW(wnd, uMsg, wParam, lParam);
             
-            //fuck lose10 for breaking a such simple thing as AdjustWindowRect ª_ª
+            //fuck lose10 for breaking a such simple thing as AdjustWindowRect Âª_Âª
             
             RECT wndrect;
             RECT clirect;
@@ -692,7 +692,9 @@ __attribute__((no_instrument_function)) int main(int argc, char** argv)
     if(!ks)
     {
         puts("Loading OmniMIDI");
-        ks = LoadLibraryA("OmniMIDI\\OmniMIDI.dll");
+        ks = LoadLibraryA("OmniMIDI\\OmniMIDI" + 9);
+        if(!ks)
+            ks = LoadLibraryA("OmniMIDI\\OmniMIDI");
     }
     
     if(!ks)
