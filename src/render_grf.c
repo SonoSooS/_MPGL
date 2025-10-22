@@ -48,9 +48,6 @@ extern size_t midisize;
 #ifdef TEXTNPS
 extern struct histogram* hist;
 extern ULONGLONG notecounter;
-#ifndef NO_ZEROKEY
-extern ULONGLONG paincounter;
-#endif
 #endif
 
 #ifdef WMA_SIZE
@@ -203,9 +200,7 @@ void grfDrawFontOverlay(void)
         vtxidx = 0;
     }
     
-    #ifdef TRANSFORM
-    glClear(GL_DEPTH_BUFFER_BIT);
-    #endif
+    //glClear(GL_DEPTH_BUFFER_BIT);
     
     #ifdef TEXTTRANS
     glEnable(GL_BLEND);
@@ -225,10 +220,10 @@ void grfDrawFontOverlay(void)
     glVertexAttribPointer(attrGrfFontColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16, (void*)8);
     glVertexAttribPointer(attrGrfFontUV, 2, GL_UNSIGNED_SHORT, GL_FALSE, 16, (void*)12);
     
-    #ifdef SHNPS
-    glUniform1f(uniGrfFontTime, (float)((double)(PlayerReal->RealTime) / 1e7));
-    glUniform1f(uniGrfFontNPS, (float)currnps);
-    #endif
+    if(SH_VALID(uniGrfFontTime))
+        glUniform1f(uniGrfFontTime, (float)((double)(PlayerReal->RealTime) / 1e7));
+    if(SH_VALID(uniGrfFontNPS))
+        glUniform1f(uniGrfFontNPS, (float)currnps);
     
     grfFontSetBg(0xBF << 24);
     
@@ -257,11 +252,6 @@ void grfDrawFontOverlay(void)
         #define TEXTLOFFS(offs) (TEXTL + offs)
     #endif
     
-    #ifndef NO_ZEROKEY
-    if(paincounter)
-        ybase -= 4;
-    #endif
-    
     #ifdef TEXTNPS
     textlen = sprintf(buf, "%s N/s ", _commanumberU(currnps));
     grfDrawFontString(TEXTROFFS(2), ybase - 2, 2, -1, buf);
@@ -274,24 +264,7 @@ void grfDrawFontOverlay(void)
     
     #ifdef TEXTNPS
     textlen = sprintf(buf, " %s notes", _commanumberU(notecounter));
-    #ifndef NO_ZEROKEY
-    if(paincounter)
-    {
-        grfDrawFontString(TEXTR, ybase + 2, 2, -1, buf);
-        
-        textlen = sprintf(buf, " %s pain ", _commanumberU(paincounter));
-        grfDrawFontString(TEXTR, ybase - 0, 2, -1, buf);
-        textlen = sprintf(buf, " %s total", _commanumberU(paincounter + notecounter));
-        grfDrawFontString(TEXTR, ybase + 4, 2, -1, buf);
-    }
-    else
-    #endif
-        grfDrawFontString(TEXTR, ybase - 0, 2, -1, buf);
-    #endif
-    
-    #ifndef NO_ZEROKEY
-    if(paincounter)
-        ybase += 4;
+    grfDrawFontString(TEXTR, ybase - 0, 2, -1, buf);
     #endif
     
     #ifdef WMA_SIZE
@@ -511,10 +484,6 @@ void grfInstallShader(void)
     
     const char* shadera =
         "#version 330 core\n"
-    #ifdef SHNPS
-        "uniform float intime;\n"
-        "uniform float innps;\n"
-    #endif
         "in vec4 incolor;\n"
         "in vec2 inpos;\n"
         "in vec2 inuv;\n"
@@ -526,14 +495,8 @@ void grfInstallShader(void)
         "   pcolor = incolor;\n"
         "   puv = inuv * (1.0F / 128.0F);\n"
         "   vec2 pos = vec2((rawpos.x * (1.0F / 128.0F)), rawpos.y * (1.0F / 128.0F));\n"
-        #if defined(SHNPS) && defined(SHWOBBLE)
-        "   float shfactor = min((1.0F / 64.0F), pow(max(0.0F, innps - 4096.0F), 0.5F) * (1.0F / 32768.0F));\n"
-        "   vec2 vtxpos = vec2(pos.x + (sin((rawpos.y * 3.0F + (rawpos.x * 17.0F) + (intime * 0.125F * innps))) * shfactor),\n"
-        "                      pos.y + (cos((rawpos.x * 7.0F                      + (intime * innps))) * shfactor));\n"
-        #else
         "   vec2 vtxpos = pos;\n"
-        #endif
-        #if defined(KEYBOARD) && !defined(ROTAT)
+        #if defined(KEYBOARD)
         "   vtxpos.y = (vtxpos.y * 0.8F) + 0.2F;\n"
         #endif
         "   gl_Position = vec4(vtxpos.xy, 0.0F, 1.0F);\n"
@@ -582,11 +545,11 @@ void grfInstallShader(void)
     attrGrfFontColor = glGetAttribLocation(shGrfFontShader, "incolor");
     attrGrfFontUV = glGetAttribLocation(shGrfFontShader, "inuv");
     
-    if(attrGrfFontVertex < 0)
+    if(SH_INVALID(attrGrfFontVertex))
         puts("inpos not found");
-    if(attrGrfFontColor < 0)
+    if(SH_INVALID(attrGrfFontColor))
         puts("incolor not found");
-    if(attrGrfFontUV < 0)
+    if(SH_INVALID(attrGrfFontUV))
         puts("inuv not found");
     
     if(attrGrfFontVertex < 0 || attrGrfFontColor < 0 || attrGrfFontUV < 0)

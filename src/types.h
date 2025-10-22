@@ -14,3 +14,6 @@ typedef uint64_t u64;
 #define COMPILER_LIKELY(expr) __builtin_expect(!!(expr), 1)
 #define COMPILER_UNLIKELY(expr) __builtin_expect(!!(expr), 0)
 
+#define SH_INVALID(uniform) ((uniform)<0)
+#define SH_VALID(uniform) (!SH_INVALID(uniform))
+

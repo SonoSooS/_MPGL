@@ -42,21 +42,10 @@ const float minheight = (1.0F / 256.0F)
 #ifdef KEYBOARD
  * 1.5
 #endif
-#ifdef TRANSFORM
-/ 2
-#endif
 ;
 
 #if defined(HDR) && !defined(FASTHDR)
 __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
-#endif
-
-#if defined(ROUNDEDGE) && !defined(DYNASCROLL)
-//#define DYNASCROLL
-#endif
-
-#if defined(ROUNDEDGE) && defined(GLTEXT)
-#error Text rendering is not supported with round edges
 #endif
 
 #if !defined(GLTEXT) && (defined(TEXTNPS))
@@ -68,11 +57,7 @@ __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 #define TICKVAL syncvalue
 #define TICKVAR mmnotesync
 
-#ifdef TRANSFORM
-#define tickheight 100000
-#else
 #define tickheight 40000
-#endif
 
 const float tickscale = 1.0F / (float)tickheight;
 const u32 minwidth = tickheight / 32;
@@ -136,9 +121,6 @@ static KCOLOR color_blacken2(KCOLOR color)
 #ifdef TEXTNPS
 struct histogram* hist;
 u64 notecounter;
-#ifndef NO_ZEROKEY
-u64 paincounter;
-#endif
 #endif
 
 
@@ -314,9 +296,6 @@ MMTick histsum = 0;
 MMTick histdelay = 0;
 MMTick onehztimer = 0;
 u64 currnote = 0;
-#ifndef NO_ZEROKEY
-u64 painnote = 0;
-#endif
 u64 currnps = 0;
 
 int(WINAPI*kNPOriginal)(DWORD msg);
@@ -327,10 +306,6 @@ static int WINAPI kNPIntercept(DWORD note)
     {
         if((BYTE)(note >> 16))
             currnote++;
-#ifndef NO_ZEROKEY
-        else
-            painnote++;
-#endif
     }
     
     //if((BYTE)note >= 0xA0)
@@ -387,10 +362,6 @@ static void WINAPI kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
     
     currnps += currnote;
     notecounter += currnote;
-#ifndef NO_ZEROKEY
-    paincounter += painnote;
-    painnote = 0;
-#endif
     
     struct histogram* __restrict ihist;
     
@@ -681,23 +652,17 @@ static int WINAPI dwEventCallback(DWORD note)
     if(COMPILER_UNLIKELY((u8)note >= 0xA0))
         return 0;
     
-    u32 uid = (u8)(note >> 8) | ((note & 0xF) << 8)
-    #ifdef TRACKID
-    | (PlayerNotecatcher->CurrentTrack->trackid << 12)
-    #endif
+    u32 uid = 0
+        | (u8)(note >> 8)
+        | ((note & 0xF) << 8)
+        | (PlayerNotecatcher->CurrentTrack->trackid << 12)
     ;
     
     MMTick curr = TICKVAR;
     
     NoteNode* __restrict node = ActiveNoteList[uid];
     
-    if
-    (
-        (note & 0x10)
-#ifdef NO_ZEROKEY
-        && ((note >> 16) & 0xFF)
-#endif
-    )
+    if((note & 0x10) && ((note >> 16) & 0xFF))
     {
         #ifndef BUGFIXTEST
         if(node)
@@ -709,14 +674,7 @@ static int WINAPI dwEventCallback(DWORD note)
             //don't move note end if it has been previously set by notespam
             if(!~node->end)
             {
-                #ifdef ROUNDEDGE
-                    if((curr - node->start) > minwidth)
-                        node->end = curr;
-                    else
-                        node->end = node->start + minwidth;
-                #else
-                    node->end = curr;
-                #endif
+                node->end = curr;
             }
             //ActiveNoteList[uid] = 0; //already set below
         }
@@ -744,11 +702,7 @@ static int WINAPI dwEventCallback(DWORD note)
         
         node->start = curr;
         node->end = ~0;
-        node->uid = uid
-    #ifndef TRACKID
-        | (PlayerNotecatcher->CurrentTrack->trackid << 12)
-    #endif
-        ;
+        node->uid = uid;
         
         /*
         #ifdef BUGFIXTEST
@@ -776,16 +730,10 @@ static int WINAPI dwEventCallback(DWORD note)
             if(~node->end)
                 return 0;
         }
-        else ActiveNoteList[uid] = 0;
+        else
+            ActiveNoteList[uid] = 0;
         
-        #ifdef ROUNDEDGE
-            if((curr - node->start) > minwidth)
-                node->end = curr;
-            else
-                node->end = node->start + minwidth;
-        #else
-            node->end = curr;
-        #endif
+        node->end = curr;
     #endif
     }
     
@@ -807,53 +755,7 @@ static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float 
     
     KCOLOR color1 = colors[0];
     
-    #ifdef ROUNDEDGE
-    #error Please fix this shit
-    
-    #ifdef PFAKEY
-        KCOLOR color2 = color_blacken1(color1);
-    #else
-        KCOLOR color2 = color1;
-    #endif
-    KCOLOR color3 = color_blacken2(color1);
-    KCOLOR color = color1;
-    //KCOLOR color2 = color1;
-    //KCOLOR color3 = color;
-    
-    float middx = offsx + ((offsr - offsx) * 0.75F);
-    float middy = offsy + ((offst - offsy) * 0.75F);
-    
-    /*
-        0 - 1 - 2
-        | /   \ |
-        3 - 8 - 4
-        | \   / |
-        5 - 6 - 7
-    */
-    
-    ck->quads[0] = (struct quadpart){offsx, offst, color1};
-    ck->quads[1] = (struct quadpart){middx, offst, color2};
-    ck->quads[2] = (struct quadpart){offsr, offst, color1};
-    
-    ck->quads[3] = (struct quadpart){offsx, middy, color1};
-    ck->quads[4] = (struct quadpart){offsr, middy, color1};
-    
-    ck->quads[5] = (struct quadpart){offsx, offsy, color1};
-    ck->quads[6] = (struct quadpart){middx, offsy, color2};
-    ck->quads[7] = (struct quadpart){offsr, offsy, color1};
-    
-    ck->quads[8] = (struct quadpart){middx, middy, color3};
-    
-    /*float fquad = offsy + ((offst - offsy) * 0.75F);
-    float lquad = offsy + ((offst - offsy) * 0.25F);
-    
-    ck->quads[8] = (struct quadpart){offsx, lquad, color1};
-    ck->quads[9] = (struct quadpart){offsx, fquad, color1};
-    
-    ck->quads[0xA] = (struct quadpart){offsr, lquad, color3};
-    ck->quads[0xB] = (struct quadpart){offsr, fquad, color3};*/
-    
-    #else
+    #if 1
     
     #ifdef OUTLINE
     
@@ -949,55 +851,7 @@ static void AddRawVtx(float offsy, float offst, float offsx, float offsr, const 
     
     struct quad* __restrict ck = quads + (vtxidx++);
     
-    #ifdef ROUNDEDGE
-    #error Fix this shit pls
-    //DWORD color = colortable[dwUID];
-    //DWORD color1 = color; //color_blacken1(color);
-    
-    #ifdef PFAKEY
-        KCOLOR color2 = color_blacken1(color1);
-    #else
-        KCOLOR color2 = color1;
-    #endif
-    KCOLOR color3 = color_blacken2(color1);
-    KCOLOR color = color1;
-    //KCOLOR color2 = color1;
-    //KCOLOR color3 = color;
-    
-    float middx = offsx + ((offsr - offsx) * 0.75F);
-    float middy = offsy + ((offst - offsy) * 0.75F);
-    
-    /*
-        0 - 1 - 2
-        | /   \ |
-        3 - 8 - 4
-        | \   / |
-        5 - 6 - 7
-    */
-    
-    ck->quads[0] = (struct quadpart){offsx, offst, color1};
-    ck->quads[1] = (struct quadpart){middx, offst, color2};
-    ck->quads[2] = (struct quadpart){offsr, offst, color1};
-    
-    ck->quads[3] = (struct quadpart){offsx, middy, color1};
-    ck->quads[4] = (struct quadpart){offsr, middy, color1};
-    
-    ck->quads[5] = (struct quadpart){offsx, offsy, color1};
-    ck->quads[6] = (struct quadpart){middx, offsy, color2};
-    ck->quads[7] = (struct quadpart){offsr, offsy, color1};
-    
-    ck->quads[8] = (struct quadpart){middx, middy, color3};
-    
-    /*float fquad = offsy + ((offst - offsy) * 0.75F);
-    float lquad = offsy + ((offst - offsy) * 0.25F);
-    
-    ck->quads[8] = (struct quadpart){offsx, lquad, color1};
-    ck->quads[9] = (struct quadpart){offsx, fquad, color1};
-    
-    ck->quads[0xA] = (struct quadpart){offsr, lquad, color3};
-    ck->quads[0xB] = (struct quadpart){offsr, fquad, color3};*/
-    
-    #else
+    #if 1
     
     KCOLOR color1 = colors[0];
     
@@ -1099,10 +953,6 @@ static __attribute__((noinline)) void AddVtx(const NoteNode* __restrict localnod
     if(~localnode->end)
     {
         offst = ((float)((int)(localnode->end - currtick)) * tickscale) - 1.0F;
-        #ifdef TRANSFORM
-        if(offst > 1.0F)
-            offst = 1.0F;
-        #endif
     }
     
     AddRawVtx(offsy, offst, offsx, offsr, &colortable[(localnode->uid >> 8) << 1]);
@@ -1379,7 +1229,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         ,
         capsize.x, capsize.y);
     
-    #ifdef TRANSFORM
+    /*
     GLuint cap_db = 0;
     glGenRenderbuffers(1, &cap_db);
     glBindRenderbuffer(GL_RENDERBUFFER, cap_db);
@@ -1388,7 +1238,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, cap_db);
     
     glBindRenderbuffer(GL_RENDERBUFFER, cap_rb);
-    #endif
+    */
     
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, cap_rb);
     
@@ -1494,11 +1344,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             ic = 1;
     #ifdef PFACOLOR
             float light = ((seeds[0] % 20) + 80) / 100.0F;
-        #ifdef ROUNDEDGE
-            float sat = ((seeds[1] % 64) + 36) / 100.0F;
-        #else
             float sat = ((seeds[1] % 40) + 60) / 100.0F;
-        #endif
             col = HSV2RGB((seeds[2] % 360) / 360.0F, sat, light)
             #ifndef HDR
                 | (0xFF << 24)
@@ -1541,11 +1387,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     }
     while(0);
     
-#ifdef TRACKID
-    trackcount <<= 8; // *= 256;
-#else
-    trackcount = 16 * 256;
-#endif
+    trackcount *= 256; // 256keys per channel per track
     
     ActiveNoteList = malloc(sizeof(size_t) * trackcount);
     if(!ActiveNoteList)
@@ -1583,75 +1425,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 
                 for(size_t i = 0; i != dest;)
                 {
-                #ifdef ROUNDEDGE
-                    /*
-                        0 - 1 - 2
-                        | /   \ |
-                        3 - 8 - 4
-                        | \   / |
-                        5 - 6 - 7
-                    */
-                    
-                    //top left
-                    indexes[i++] = vidx + 3;
-                    indexes[i++] = vidx + 1;
-                    indexes[i++] = vidx + 0;
-                    
-                    //top right
-                    indexes[i++] = vidx + 1;
-                    indexes[i++] = vidx + 4;
-                    indexes[i++] = vidx + 2;
-                    
-                    //bottom left
-                    indexes[i++] = vidx + 6;
-                    indexes[i++] = vidx + 3;
-                    indexes[i++] = vidx + 5;
-                    
-                    //bottom right
-                    indexes[i++] = vidx + 4;
-                    indexes[i++] = vidx + 6;
-                    indexes[i++] = vidx + 7;
-                    
-                    //TL1
-                    indexes[i++] = vidx + 3;
-                    indexes[i++] = vidx + 8;
-                    indexes[i++] = vidx + 1;
-                    
-                    //TL2
-                    indexes[i++] = vidx + 8;
-                    indexes[i++] = vidx + 1;
-                    indexes[i++] = vidx + 3;
-                    
-                    //TR1
-                    indexes[i++] = vidx + 1;
-                    indexes[i++] = vidx + 8;
-                    indexes[i++] = vidx + 4;
-                    
-                    //TR2
-                    indexes[i++] = vidx + 8;
-                    indexes[i++] = vidx + 4;
-                    indexes[i++] = vidx + 1;
-                    
-                    //BL1
-                    indexes[i++] = vidx + 6;
-                    indexes[i++] = vidx + 8;
-                    indexes[i++] = vidx + 3;
-                    
-                    //BL2
-                    indexes[i++] = vidx + 8;
-                    indexes[i++] = vidx + 3;
-                    indexes[i++] = vidx + 6;
-                    
-                    //BR1
-                    indexes[i++] = vidx + 4;
-                    indexes[i++] = vidx + 8;
-                    indexes[i++] = vidx + 6;
-                    
-                    //BR2
-                    indexes[i++] = vidx + 8;
-                    indexes[i++] = vidx + 6;
-                    indexes[i++] = vidx + 4;
-                #else
+                #if 1
                     /*
                         0 - 3
                         | \ |
@@ -1837,18 +1611,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     DWORD timeout = 0;
     
-    #if defined(ROUNDEDGE) //|| defined(TRIPPY) //|| defined(GLOWEDGE)
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    #endif
-    
-    #ifdef TRANSFORM
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    #else
     //glEnable(GL_DEPTH_TEST);
     //glDepthFunc(GL_LEQUAL);
-    #endif
     
     //glEnable(GL_CULL_FACE);
     //glCullFace(GL_CCW);
@@ -1951,11 +1715,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         CUSTOMTICK
         ;
         #else
-        (2500000
-        #if defined(TRANSFORM) || defined(ROTAT)
-        * 4
-        #endif
-        ) / PlayerReal->tempomulti;
+        (2500000) / PlayerReal->tempomulti;
         #endif
         ULONGLONG notesync = TICKVAR;
         ULONGLONG currtick = TICKVAL;
@@ -1966,12 +1726,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         currtimer = PlayerReal->RealTime;
         #endif
         
-        #ifdef SHTIME
         #ifdef DYNASCROLL
         BIND_IF(glUniform1f, uniGrTime, (float)(currtick / (double)tickheight * 0.25));
         #else
         BIND_IF(glUniform1f, uniGrTime, (float)((double)(PlayerReal->RealTime) / 1e7));
-        #endif
         #endif
         
         ULONGLONG midtick = currtick + tickheight;
@@ -1989,6 +1747,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         // ===[BAD IDEA NEVER UNCOMMENT THIS]===
         
         #if defined(HDR) && !defined(FASTHDR)
+        #warning Fix this soon
+        #if 0
         #error Fix this soon
         #ifdef TRIPPY
         const float uc = 0.1F;
@@ -1997,7 +1757,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         const float uc = 0.0F;
         const float kc = -1.0F;
         #endif
-        #ifdef ROTAT
+        #if 0 /* TODO: backfill */
         AddRawVtx(kc, 1,   0, 150, (KCOLOR){uc, uc, uc, 1});
         AddRawVtx(kc, 1, 150, 300, (KCOLOR){uc, uc, uc, 1});
         AddRawVtx(kc, 1, 300, 450, (KCOLOR){uc, uc, uc, 1});
@@ -2010,6 +1770,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #endif
         #endif
         #endif
+        #endif
         
         
         if(vtxidx)
@@ -2017,7 +1778,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         BIND_IF(glUniform1f, attrGrNotemix, 1.0F);
         
-        #if 1 && defined(DEBUGTEXT) && defined(NOISEOVERLAY)
+        #if 0 && defined(DEBUGTEXT) /* beat visualizer fills notes per beat */
         {
             LONGLONG asdtick = currtick - (currtick % PlayerReal->timediv) - PlayerReal->timediv - PlayerReal->timediv;
             do
@@ -2264,7 +2025,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         #ifdef KEYBOARD
         
-        #if defined(HDR) && defined(TRIPPY)
+        #if defined(HDR)
         BIND_IF(glUniform1f, attrGrNotemix, 0.0F);
         //BIND_IF(glUniform1f, attrGrNotemix, 1.0F / 64.0F);
         #endif
@@ -2311,9 +2072,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 #else
                     1
                 #endif
-                #ifdef GLOW
                 #ifndef HDR
+                #ifdef GLOW
                 ? 0xFF111111 : 0xFF808080;
+                #else
+                ? 0xFF202020 : 0xFFFFFFFF;
+                #endif
                 #else
                     #ifndef TRIPPY
                     ? (KCOLOR){ 0.04296875F, 0.04296875F, 0.04296875F, 1.0F }
@@ -2322,12 +2086,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                     ? (KCOLOR){ 0.06640625F, 0.06640625F, 0.06640625F, 1.0F }
                     : (KCOLOR){ 0.5F, 0.5F, 0.5F, 1.0F };
                     #endif
-                #endif
-                #else
-                #ifdef HDR
-                #error HDR is not supported if glow is turned off
-                #endif
-                ? 0xFF202020 : 0xFFFFFFFF;
                 #endif
             
             if(lmn->start)
@@ -2398,14 +2156,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             #else
                 0
             #endif
-                ?
-            #if defined(TRANSFORM) && defined(ROTAT)
-                -1.01875F : -1.125F
-            #elif defined(TRANSFORM) || defined(ROTAT)
-                -1.075F : -1.125F
-            #else
-                -1.30F : -1.5F
-            #endif
+                ? -1.30F : -1.5F
                 , -1.0F,
             #ifdef PIANOKEYS
                 offsx, offsr
