@@ -4,3 +4,6 @@
 /*.7z
 /src/profi.c
 /src/profi.h
+/_make.bat
+/_strip.bat
+/callch.bin
