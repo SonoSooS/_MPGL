@@ -333,6 +333,43 @@ static int WINAPI kNPIntercept(DWORD note)
 #endif
     }
     
+    //if((BYTE)note >= 0xA0)
+    if(0)
+    {
+        printf("Event @ %5u: %8llu: %02X", PlayerNotecatcher->CurrentTrack->trackid, PlayerNotecatcher->TickCounter, (u8)note);
+        
+        switch((BYTE)note)
+        {
+            case 0xA0 ... 0xAF:
+                printf(" %02X %02X (Key Aftertouch)\n", (u8)(note >> 8), (u8)(note >> 16));
+                break;
+            
+            case 0xB0 ... 0xBF:
+                printf(" %02X %02X (CC %3u = %3u)\n", (u8)(note >> 8), (u8)(note >> 16), (u8)(note >> 8), (u8)(note >> 16));
+                break;
+            
+            case 0xC0 ... 0xCF:
+                printf(" %02X    (Instrument select)\n", (u8)(note >> 8));
+                break;
+            
+            case 0xD0 ... 0xDF:
+                printf(" %02X    (Chn Aftertouch)\n", (u8)(note >> 8));
+                break;
+            
+            case 0xE0 ... 0xEF:
+            {
+                DWORD bend = ((note >> 8) & 0x7F) + (((note >> 16) & 0x7F) << 7);
+                
+                printf(" %02X %02X (Pitchbend %+6i)\n", (u8)(note >> 8), (u8)(note >> 16), (int)bend - 8192);
+                break;
+            }
+            
+            default:
+                printf(" %02X %02X (junk)\n", (u8)(note >> 8), (u8)(note >> 16));
+                break;
+        }
+    }
+    
     if(kNPOriginal)
         return kNPOriginal(note);
     else
@@ -1291,12 +1328,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     isrender = FALSE;
     
     wglMakeCurrent(dc, glctx);
-    /*
-    if(glDebugMessageCallbackARB && !IsBadCodePtr(glDebugMessageCallbackARB))
+    
+    //if(glDebugMessageCallbackARB && !IsBadCodePtr(glDebugMessageCallbackARB))
     {
-        glEnable(GL_DEBUG_OUTPUT);
-        glDebugMessageCallbackARB(DebugCB, NULL);
-    }*/
+        //glEnable(GL_DEBUG_OUTPUT);
+        //glDebugMessageCallbackARB(DebugCB, NULL);
+    }
     
     #if !defined(TIMI_CAPTURE) || defined(TIMI_NOWAIT)
     uglSwapControl(1);

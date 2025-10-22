@@ -226,7 +226,7 @@ static LRESULT CALLBACK WindowProc(HWND wnd, UINT uMsg, WPARAM wParam, LPARAM lP
             
             LRESULT cwresult = DefWindowProcW(wnd, uMsg, wParam, lParam);
             
-            //fuck lose10 for breaking a such simple thing as AdjustWindowRect Âª_Âª
+            //fuck lose10 for breaking a such simple thing as AdjustWindowRect ª_ª
             
             RECT wndrect;
             RECT clirect;
