@@ -47,6 +47,7 @@
 //#define OLDDENSE
 //#define BUGFIXTEST
 //#define NORENDEROPT
+//#define FILTER_SPAM
 
 #define WMA_SIZE 16
 //#define WMA_SIZE 3

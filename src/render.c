@@ -668,8 +668,10 @@ static int WINAPI dwEventCallback(DWORD note)
         if(node)
         {
             //filter out useless notespam
+        #ifdef FILTER_SPAM
             if(node->start == curr)
                 return 0;
+        #endif
             
             //don't move note end if it has been previously set by notespam
             if(!~node->end)
