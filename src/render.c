@@ -721,10 +721,57 @@ static int WINAPI dwEventCallback(DWORD note)
     if(node)
     {
     #ifdef BUGFIXTEST
+    #if 0 /* TODO: investigate why this causes shadows */
+        NoteNode* __restrict backupnode = node;
+        
+        for(;;)
+        {
+            if(!node->overlapped_voce)
+            {
+                if(node != backupnode)
+                    backupnode->overlapped_voce = NULL;
+                break;
+            }
+            
+            backupnode = node;
+            node = node->overlapped_voce;
+        }
+        
         if(!~node->end)
             node->end = curr;
         
-        ActiveNoteList[uid] = node->overlapped_voce;
+        return 0;
+    #endif
+        if(!node->overlapped_voce)
+        {
+            if(!~node->end)
+                node->end = curr;
+            
+            ActiveNoteList[uid] = 0;
+            
+            return 0;
+        }
+        else
+        {
+            NoteNode* __restrict backupnode = node;
+            
+            for(;;)
+            {
+                node = node->overlapped_voce;
+                
+                if(!node->overlapped_voce)
+                {
+                    if(node != backupnode)
+                        backupnode->overlapped_voce = NULL;
+                    break;
+                }
+                
+                backupnode = node;
+            }
+            
+            if(!~node->end)
+                node->end = curr;
+        }
     #else
         if(node->start == curr)
         {
