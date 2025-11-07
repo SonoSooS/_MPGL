@@ -136,17 +136,18 @@ static void WINAPI DebugCB(GLenum source, GLenum type, GLuint id, GLenum severit
 }
 
 
-typedef struct NoteNode
+struct NoteNode
 {
     struct NoteNode* next;
-    u32 uid;
-    MMTick start;
-    MMTick end;
 #ifndef OVERLAPREMOVE
     struct NoteNode* overlapped_voce;
-    size_t junk;
 #endif
-} NoteNode;
+    MMTick start;
+    MMTick end;
+    u32 uid;
+    u32 layering;
+};
+typedef struct NoteNode NoteNode;
 
 const size_t szNode = sizeof(NoteNode);
 
@@ -666,24 +667,30 @@ static int WINAPI dwEventCallback(DWORD note)
     if((note & 0x10) && ((note >> 16) & 0xFF)) // NoteOn
     {
     #ifdef OVERLAPREMOVE
-        #error Fix overlap remove mode with layer count
+        DWORD layercount = 0;
         
         node = ActiveNoteList[uid];
         if(node)
         {
-            //filter out useless notespam
-        #ifdef FILTER_SPAM
             if(node->start == curr)
-                return 0;
-        #endif
-            
-            //don't move note end if it has been previously set by notespam
-            if(!~node->end)
             {
-                node->end = curr;
+                ++(node->layering);
+                return 0;
             }
-            //ActiveNoteList[uid] = 0; //already set below
+            
+            if(!~node->end)
+                node->end = curr;
+            
+            layercount = node->layering;
         }
+        
+        node = NoteAlloc();
+        if(!node)
+            return 1;
+        
+        ActiveNoteList[uid] = node;
+        node->layering = layercount;
+        
     #else
         
         NoteNode* __restrict backupnode = ActiveNoteListHead[uid];
@@ -699,12 +706,14 @@ static int WINAPI dwEventCallback(DWORD note)
             ActiveNoteList[uid] = node;
         
         ActiveNoteListHead[uid] = node;
+        
+        node->overlapped_voce = 0;
     #endif
         
         node->start = curr;
         node->end = ~0;
         node->uid = uid;
-        node->overlapped_voce = 0;
+        node->layering = 0;
         
         NoteAppend(node);
         
@@ -723,18 +732,15 @@ static int WINAPI dwEventCallback(DWORD note)
         if(!node)
             ActiveNoteListHead[uid] = 0;
     #else
-        #error TODO: fix overlap remove mode
-        
-        if(node->start == curr)
+        if(!node->layering)
         {
-            //end has already been set
-            if(~node->end)
-                return 0;
+            if(!~node->end)
+                node->end = curr;
         }
         else
-            ActiveNoteList[uid] = 0;
-        
-        node->end = curr;
+        {
+            --(node->layering);
+        }
     #endif
     }
     
