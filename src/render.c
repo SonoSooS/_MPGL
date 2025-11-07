@@ -142,7 +142,7 @@ typedef struct NoteNode
     u32 uid;
     MMTick start;
     MMTick end;
-#ifdef BUGFIXTEST
+#ifndef OVERLAPREMOVE
     struct NoteNode* overlapped_voce;
     size_t junk;
 #endif
@@ -209,6 +209,7 @@ static NoteNode* VisibleNoteList;
 static NoteNode* VisibleNoteListHead;
 
 static NoteNode* *ActiveNoteList;
+static NoteNode* *ActiveNoteListHead;
 static KCOLOR*   colortable;
 
 size_t notealloccount;
@@ -660,11 +661,14 @@ static int WINAPI dwEventCallback(DWORD note)
     
     MMTick curr = TICKVAR;
     
-    NoteNode* __restrict node = ActiveNoteList[uid];
+    NoteNode* __restrict node;
     
-    if((note & 0x10) && ((note >> 16) & 0xFF))
+    if((note & 0x10) && ((note >> 16) & 0xFF)) // NoteOn
     {
-        #ifndef BUGFIXTEST
+    #ifdef OVERLAPREMOVE
+        #error Fix overlap remove mode with layer count
+        
+        node = ActiveNoteList[uid];
         if(node)
         {
             //filter out useless notespam
@@ -680,99 +684,47 @@ static int WINAPI dwEventCallback(DWORD note)
             }
             //ActiveNoteList[uid] = 0; //already set below
         }
-        #endif
+    #else
         
-        #ifdef BUGFIXTEST
-        NoteNode* __restrict backupnode = node;
+        NoteNode* __restrict backupnode = ActiveNoteListHead[uid];
         
         node = NoteAlloc();
         
         if(!node) //allocation failed
             return 1;
         
-        node->overlapped_voce = backupnode;
+        if(backupnode)
+            backupnode->overlapped_voce = node;
+        else
+            ActiveNoteList[uid] = node;
         
-        ActiveNoteList[uid] = node;
-        
-        #else
-        node = NoteAlloc();
-        ActiveNoteList[uid] = node; //reset it no matter what
-        
-        if(!node) //allocation failed
-            return 1;
-        #endif
+        ActiveNoteListHead[uid] = node;
+    #endif
         
         node->start = curr;
         node->end = ~0;
         node->uid = uid;
-        
-        /*
-        #ifdef BUGFIXTEST
         node->overlapped_voce = 0;
-        node->junk = 0;
-        #endif
-        */
         
         NoteAppend(node);
         
         return 0;
     }
     
+    node = ActiveNoteList[uid];
     if(node)
     {
-    #ifdef BUGFIXTEST
-    #if 0 /* TODO: investigate why this causes shadows */
-        NoteNode* __restrict backupnode = node;
-        
-        for(;;)
-        {
-            if(!node->overlapped_voce)
-            {
-                if(node != backupnode)
-                    backupnode->overlapped_voce = NULL;
-                break;
-            }
-            
-            backupnode = node;
-            node = node->overlapped_voce;
-        }
-        
+    #ifndef OVERLAPREMOVE
         if(!~node->end)
             node->end = curr;
         
-        return 0;
-    #endif
-        if(!node->overlapped_voce)
-        {
-            if(!~node->end)
-                node->end = curr;
-            
-            ActiveNoteList[uid] = 0;
-            
-            return 0;
-        }
-        else
-        {
-            NoteNode* __restrict backupnode = node;
-            
-            for(;;)
-            {
-                node = node->overlapped_voce;
-                
-                if(!node->overlapped_voce)
-                {
-                    if(node != backupnode)
-                        backupnode->overlapped_voce = NULL;
-                    break;
-                }
-                
-                backupnode = node;
-            }
-            
-            if(!~node->end)
-                node->end = curr;
-        }
+        node = node->overlapped_voce;
+        ActiveNoteList[uid] = node;
+        if(!node)
+            ActiveNoteListHead[uid] = 0;
     #else
+        #error TODO: fix overlap remove mode
+        
         if(node->start == curr)
         {
             //end has already been set
@@ -1438,10 +1390,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     trackcount *= 256; // 256keys per channel per track
     
-    ActiveNoteList = malloc(sizeof(size_t) * trackcount);
-    if(!ActiveNoteList)
+    ActiveNoteList =     malloc(sizeof(size_t) * trackcount);
+    ActiveNoteListHead = malloc(sizeof(size_t) * trackcount);
+    if(!ActiveNoteList || !ActiveNoteListHead)
         puts("No ActiveNoteList, fuck");
-    ZeroMemory(ActiveNoteList, sizeof(size_t) * trackcount);
+    ZeroMemory(ActiveNoteList,     sizeof(size_t) * trackcount);
+    ZeroMemory(ActiveNoteListHead, sizeof(size_t) * trackcount);
     
     midisize += trackcount * sizeof(size_t);
     

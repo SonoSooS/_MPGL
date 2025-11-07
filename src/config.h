@@ -45,7 +45,7 @@
 //#define DEBUGTEXT
 //#define EXTREMEDEBUG
 //#define OLDDENSE
-#define BUGFIXTEST
+//#define OVERLAPREMOVE
 //#define NORENDEROPT
 //#define FILTER_SPAM
 
