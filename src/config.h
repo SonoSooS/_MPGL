@@ -46,7 +46,6 @@
 //#define EXTREMEDEBUG
 //#define OLDDENSE
 #define OVERLAPREMOVE
-//#define NORENDEROPT
 //#define FILTER_SPAM
 
 #define WMA_SIZE 16

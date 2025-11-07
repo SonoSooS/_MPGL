@@ -1824,11 +1824,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         NoteNode* __restrict prevnote = 0;
         NoteNode* __restrict currnote = VisibleNoteList;
         
-        #ifndef NORENDEROPT
         //loop over freeable notes first
         while(currnote && currnote->start <= currtick) // already triggered
         {
-            #ifdef KEYBOARD
+        #ifdef KEYBOARD
             NoteNode* lmn = &KeyNotes[(BYTE)currnote->uid];
             
             if(lmn->uid != currnote->uid)
@@ -1839,7 +1838,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             }
             else if(lmn->start < 10000000)
                 lmn->start = 10000000;
-            #endif
+        #endif
             
             if(currnote->end > currtick) //note not finished yet
             {
@@ -1902,80 +1901,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             
             AddVtx(localnode, currtick, tickscale);
         }
-        #else
-        
-        while(currnote)
-        {
-            if(currnote->end > currtick)
-            {
-                NoteNode* localnode = currnote;
-                prevnote = currnote;
-                currnote = localnode->next;
-                
-                if(localnode->start < toptick)
-                    AddVtx(localnode, currtick, tickscale);
-                
-                #ifdef KEYBOARD
-                if(localnode.start <= currtick)
-                {
-                    NoteNode* lmn = &KeyNotes[(BYTE)localnode.uid];
-                    
-                    if(lmn->uid != localnode.uid)
-                    {
-                        lmn->uid = localnode.uid;
-                        lmn->start = 14000000;
-                        //lmn->start = 21000000;
-                    }
-                    else if(lmn->start < 10000000)
-                        lmn->start = 10000000;
-                }
-                #endif
-            }
-            else
-            {
-                if(prevnote)
-                {
-                    NoteNode* nn = currnote->next;
-                    prevnote->next = nn;
-                    
-                    NoteFree(currnote);
-                    currnote = nn;
-                    
-                    continue;
-                }
-                else if(VisibleNoteList == currnote)
-                {
-                    /*
-                    if(VisibleNoteList == VisibleNoteListHead)
-                    {
-                        VisibleNoteList = 0;
-                        VisibleNoteListHead = 0;
-                        
-                        if(currnote->next)
-                            puts("Oh no, eventual consistency is broken!");
-                        
-                        NoteFree(currnote);
-                        currnote = 0;
-                        break;
-                    }*/
-                    
-                    prevnote = 0;
-                    
-                    NoteNode* nn = currnote->next;
-                    VisibleNoteList = nn;
-                    NoteFree(currnote);
-                    currnote = nn;
-                    continue;
-                }
-                else
-                {
-                    puts("WAT HOW");
-                    break;
-                }
-            }
-        }
-        
-        #endif
         
         if(vtxidx)
             FlushToilet();
