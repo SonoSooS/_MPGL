@@ -1728,6 +1728,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         currtimer = PlayerReal->RealTime;
         #endif
         
+        if(currtick && (currtick >= PlayerNotecatcher->TickCounter))
+            currtick = PlayerNotecatcher->TickCounter - 1;
+        
         #ifdef DYNASCROLL
         BIND_IF(glUniform1f, uniGrTime, (float)(currtick / (double)tickheight * 0.25));
         #else
@@ -1736,6 +1739,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         ULONGLONG midtick = currtick + tickheight;
         ULONGLONG toptick = midtick + tickheight;
+        
         
         //printf("%10llu %10llu %i %u\n", notesync, currtick, (int)(notesync - currtick), PlayerReal->tempo);
         
