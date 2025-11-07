@@ -81,11 +81,11 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
             player->SleepTicks = 1;
     }
     
-    MMTick ticker = 0;
-    MMTick tickdiff = 0;
-    s32 tdiff = 0;
-    s32 oldsleep = 0;
-    s32 deltasleep = 0;
+    MMTick realtime = 0;
+    MMTick realtime_prev = 0;
+    s32 elapsed_realtime = 0;
+    s32 sleeptime_prev = 0;
+    s32 sleeptime_offset = 0;
     
     MMTrack* trk = player->tracks;
     
@@ -137,7 +137,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
     }
 #endif
     
-    NtQuerySystemTime(&tickdiff);
+    NtQuerySystemTime(&realtime_prev);
     
     cbMMShortMsg KShortMsg = player->KShortMsg;
     
@@ -428,45 +428,63 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
         {        
             if(minsleep)
             {
+                // Cap maximum sleep time, so
+                //  tasks that expect frequent updates
+                //  still get called enough times per second
+                //  to keep them updated with enough granularity.
                 if(tempomaxsleep && minsleep > tempomaxsleep)
                     minsleep = tempomaxsleep;
+                
                 counter += minsleep;
-                INT32 sleeptime = (INT32)(minsleep * tempomulti);
+                INT32 should_sleep_time = (INT32)(minsleep * tempomulti);
                 player->RealTimeUndiv += minsleep * player->tempo * 10;
-                player->RealTime += sleeptime;
+                player->RealTime += should_sleep_time;
                 player->TickCounter = counter;
                 
-                NtQuerySystemTime(&ticker);
-                tdiff = (INT32)(ticker - tickdiff);
-                tickdiff = ticker;
+                NtQuerySystemTime(&realtime);
+                if(((realtime - realtime_prev) + 10000000ULL) <= 20000000ULL) // Cap elapsed time udpates to +-1s
+                    elapsed_realtime = (INT32)(realtime - realtime_prev);
+                else
+                    elapsed_realtime = 10000000ULL; //HACK: better fallback time value?
                 
-                INT32 delt = (INT32)(tdiff - oldsleep);
-                oldsleep = sleeptime;
+                realtime_prev = realtime;
                 
-                deltasleep += delt;
+                // Subtract Sleep() time from total elapsed time to
+                //  calculate the total real time the CPU spent working
+                //  (Sleep() counts as a space heater tight loop for our purposes)
+                // This is basically the error term for delta-sigma modulation.
+                // - Positive value means that more time elapsed than we wanted to (possibly due to high CPU load)
+                // - Negative value means that Sleep() exits early
+                INT32 sleeptime_error = (INT32)(elapsed_realtime - sleeptime_prev);
+                sleeptime_prev = should_sleep_time;
                 
-                if(deltasleep > 0)
-                    sleeptime -= deltasleep;
+                // Integrate elapsed time error
+                sleeptime_offset += sleeptime_error;
+                // Subtract the error term for correcting the actual sleep time to do
+                should_sleep_time -= sleeptime_offset;
                 
                 if(player->KSyncFunc)
                     player->KSyncFunc(player, minsleep);
                 
             #ifdef DEBUGTEXT
-                //printf("\rtimer %20lli %10i %10i    ", ticker, sleeptime, deltasleep);
-                player->_debug_deltasleep = deltasleep;
-                player->_debug_sleeptime = sleeptime;
+                //printf("\rtimer %20lli %10i %10i    ", realtime, should_sleep_time, sleeptime_offset);
+                player->_debug_deltasleep = sleeptime_offset;
+                player->_debug_sleeptime = should_sleep_time;
             #endif
                 
-                //improves crash performance
-                if(sleeptime <= 0)
+                // Don't even attemt to sleep if we've fallen behind
+                if(should_sleep_time <= 0)
                 {
-                    if(deltasleep > 100000)
-                        deltasleep = 100000;
+                    // Cap maximum offset, so when catching up,
+                    //  it doesn't fast-worward too much
+                    if(sleeptime_offset > 200000) // Cap delay to 20ms (round up from the default time period)
+                        sleeptime_offset = 200000;
                 }
                 else
                 {
-                    //printf("Sleep %016llX\n", sleeptime);
-                    INT64 realsleeptime = -sleeptime;
+                    // Negative sleep time to NtDelayExecution is delta sleep
+                    // (as opposed to absolute sleep on a positive value)
+                    INT64 realsleeptime = -should_sleep_time;
                     NtDelayExecution(0, &realsleeptime);
                 }
             }
@@ -493,8 +511,8 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
             }
             else
             {
-                NtQuerySystemTime(&ticker);
-                tickdiff = ticker;
+                NtQuerySystemTime(&realtime);
+                realtime_prev = realtime;
                 
                 INT64 mo = ~0LL;
                 NtDelayExecution(0, &mo);
