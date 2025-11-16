@@ -141,6 +141,9 @@ struct NoteNode
     struct NoteNode* next;
 #ifndef OVERLAPREMOVE
     struct NoteNode* overlapped_voce;
+#ifdef PFALAYER
+    struct NoteNode* backwards_voce;
+#endif
 #endif
     MMTick start;
     MMTick end;
@@ -210,7 +213,9 @@ static NoteNode* VisibleNoteList;
 static NoteNode* VisibleNoteListHead;
 
 static NoteNode* *ActiveNoteList;
-static NoteNode* *ActiveNoteListHead;
+#if !defined(OVERLAPREMOVE) && !defined(PFALAYER)
+static NoteNode* *ActiveNoteListOther;
+#endif
 static KCOLOR*   colortable;
 
 size_t notealloccount;
@@ -666,81 +671,100 @@ static int WINAPI dwEventCallback(DWORD note)
     
     if((note & 0x10) && ((note >> 16) & 0xFF)) // NoteOn
     {
-    #ifdef OVERLAPREMOVE
         DWORD layercount = 0;
+        NoteNode* __restrict backupnode = ActiveNoteList[uid];
         
-        node = ActiveNoteList[uid];
-        if(node)
+    #ifdef OVERLAPREMOVE
+        // When overlap remove, eat spam, or split note
+        //  to keep layer depth at 1, minimizing overdraw
+        if(backupnode)
         {
-            if(node->start == curr)
+            if(backupnode->start == curr)
             {
-                ++(node->layering);
+                ++(backupnode->layering); // Sat up spam with the active note
                 return 0;
             }
             
-            if(!~node->end)
-                node->end = curr;
+            if(!~backupnode->end)
+                backupnode->end = curr;
             
-            layercount = node->layering;
+            // When we have to split,
+            //  transfer spam count to the next note
+            //  to continue the fake layering
+            layercount = backupnode->layering;
         }
+    #endif
         
         node = NoteAlloc();
-        if(!node)
-            return 1;
-        
-        ActiveNoteList[uid] = node;
-        node->layering = layercount;
-        
-    #else
-        
-        NoteNode* __restrict backupnode = ActiveNoteListHead[uid];
-        
-        node = NoteAlloc();
-        
         if(!node) //allocation failed
             return 1;
         
+    #ifndef OVERLAPREMOVE
+        #ifdef PFALAYER
+        // PFA stacking like pyramid layers.
+        // MIDI is stacking FIFO / Queue.
+        // Double linking is needed for pyramid stacking.
+        
+        node->backwards_voce = backupnode;
+        #endif
+        
         if(backupnode)
             backupnode->overlapped_voce = node;
+        #ifndef PFALAYER
         else
-            ActiveNoteList[uid] = node;
-        
-        ActiveNoteListHead[uid] = node;
+            ActiveNoteListOther[uid] = node;
+        #endif
         
         node->overlapped_voce = 0;
     #endif
         
+        ActiveNoteList[uid] = node;
+        
         node->start = curr;
         node->end = ~0;
         node->uid = uid;
-        node->layering = 0;
+        node->layering = layercount;
         
         NoteAppend(node);
         
         return 0;
     }
     
+#if !defined(OVERLAPREMOVE) && !defined(PFALAYER)
+    node = ActiveNoteListOther[uid];
+#else
     node = ActiveNoteList[uid];
+#endif
+    
     if(node)
     {
-    #ifndef OVERLAPREMOVE
+    #ifdef OVERLAPREMOVE
+        if(node->layering)
+        {
+            --(node->layering);
+            return 0;
+        }
+    #endif
+        
         if(!~node->end)
             node->end = curr;
         
-        node = node->overlapped_voce;
+    #ifndef OVERLAPREMOVE
+        #ifdef PFALAYER
+        node = node->backwards_voce;
+        
+        //HACK: is this necessary? probably not
+        //if(node)
+        //    node->overlapped_voce = 0;
+        
         ActiveNoteList[uid] = node;
+        #else
+        node = node->overlapped_voce;
+        
+        ActiveNoteListOther[uid] = node;
         if(!node)
-            ActiveNoteListHead[uid] = 0;
-    #else
-        if(!node->layering)
-        {
-            if(!~node->end)
-                node->end = curr;
-        }
-        else
-        {
-            --(node->layering);
-        }
+            ActiveNoteList[uid] = 0;
+        #endif
     #endif
     }
     
@@ -1396,12 +1420,16 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     trackcount *= 256; // 256keys per channel per track
     
-    ActiveNoteList =     malloc(sizeof(size_t) * trackcount);
-    ActiveNoteListHead = malloc(sizeof(size_t) * trackcount);
-    if(!ActiveNoteList || !ActiveNoteListHead)
+    ActiveNoteList =      malloc(sizeof(size_t) * trackcount);
+    if(!ActiveNoteList)
         puts("No ActiveNoteList, fuck");
-    ZeroMemory(ActiveNoteList,     sizeof(size_t) * trackcount);
-    ZeroMemory(ActiveNoteListHead, sizeof(size_t) * trackcount);
+    ZeroMemory(ActiveNoteList,      sizeof(size_t) * trackcount);
+#if !defined(OVERLAPREMOVE) && !defined(PFALAYER)
+    ActiveNoteListOther = malloc(sizeof(size_t) * trackcount);
+    if(!ActiveNoteListOther)
+        puts("No ActiveNoteListOther, fuck");
+    ZeroMemory(ActiveNoteListOther, sizeof(size_t) * trackcount);
+#endif
     
     midisize += trackcount * sizeof(size_t);
     
