@@ -140,10 +140,7 @@ struct NoteNode
 {
     struct NoteNode* next;
 #ifndef OVERLAPREMOVE
-    struct NoteNode* overlapped_voce;
-#ifdef PFALAYER
-    struct NoteNode* backwards_voce;
-#endif
+    struct NoteNode* overlapped_voce; // Either forwards or backwards, depending on layering
 #endif
     MMTick start;
     MMTick end;
@@ -151,6 +148,18 @@ struct NoteNode
     u32 layering;
 };
 typedef struct NoteNode NoteNode;
+
+struct ActiveNode
+{
+    NoteNode* NoteTop;
+#if !defined(OVERLAPREMOVE) && !defined(PFALAYER)
+    NoteNode* NoteBottom;
+#endif
+#ifdef OVERLAPREMOVE
+    u32 Layering;
+    MMTick LastStartTime;
+#endif
+};
 
 const size_t szNode = sizeof(NoteNode);
 
@@ -212,10 +221,7 @@ static NoteNode* freelist_returnhead;
 static NoteNode* VisibleNoteList;
 static NoteNode* VisibleNoteListHead;
 
-static NoteNode* *ActiveNoteList;
-#if !defined(OVERLAPREMOVE) && !defined(PFALAYER)
-static NoteNode* *ActiveNoteListOther;
-#endif
+static struct ActiveNode* ActiveNoteList;
 static KCOLOR*   colortable;
 
 size_t notealloccount;
@@ -667,32 +673,33 @@ static int WINAPI dwEventCallback(DWORD note)
     
     MMTick curr = TICKVAR;
     
+    struct ActiveNode* __restrict const active = &ActiveNoteList[uid];
+    
     NoteNode* __restrict node;
     
     if((note & 0x10) && ((note >> 16) & 0xFF)) // NoteOn
     {
-        DWORD layercount = 0;
-        NoteNode* __restrict backupnode = ActiveNoteList[uid];
+        NoteNode* __restrict backupnode = active->NoteTop;
         
     #ifdef OVERLAPREMOVE
+        ++(active->Layering);
+        
         // When overlap remove, eat spam, or split note
         //  to keep layer depth at 1, minimizing overdraw
         if(backupnode)
         {
-            if(backupnode->start == curr)
+            if(active->LastStartTime == curr)
             {
-                ++(backupnode->layering); // Sat up spam with the active note
+                //HACK: restarting notes is super risky
+                backupnode->end = ~0;
                 return 0;
             }
             
             if(!~backupnode->end)
                 backupnode->end = curr;
-            
-            // When we have to split,
-            //  transfer spam count to the next note
-            //  to continue the fake layering
-            layercount = backupnode->layering;
         }
+        
+        active->LastStartTime = curr;
     #endif
         
         node = NoteAlloc();
@@ -700,30 +707,26 @@ static int WINAPI dwEventCallback(DWORD note)
             return 1;
         
     #ifndef OVERLAPREMOVE
-        #ifdef PFALAYER
         // PFA stacking like pyramid layers.
         // MIDI is stacking FIFO / Queue.
-        // Double linking is needed for pyramid stacking.
         
-        node->backwards_voce = backupnode;
+        #ifdef PFALAYER
+            node->overlapped_voce = backupnode;
+        #else
+            node->overlapped_voce = 0;
+            
+            if(backupnode)
+                backupnode->overlapped_voce = node;
+            else
+                active->NoteBottom = node;
         #endif
-        
-        if(backupnode)
-            backupnode->overlapped_voce = node;
-        #ifndef PFALAYER
-        else
-            ActiveNoteListOther[uid] = node;
-        #endif
-        
-        node->overlapped_voce = 0;
     #endif
         
-        ActiveNoteList[uid] = node;
+        active->NoteTop = node;
         
         node->start = curr;
         node->end = ~0;
         node->uid = uid;
-        node->layering = layercount;
         
         NoteAppend(node);
         
@@ -731,18 +734,18 @@ static int WINAPI dwEventCallback(DWORD note)
     }
     
 #if !defined(OVERLAPREMOVE) && !defined(PFALAYER)
-    node = ActiveNoteListOther[uid];
+    node = active->NoteBottom;
 #else
-    node = ActiveNoteList[uid];
+    node = active->NoteTop;
 #endif
     
     if(node)
     {
     #ifdef OVERLAPREMOVE
-        if(node->layering)
+        if(active->Layering)
         {
-            --(node->layering);
-            return 0;
+            if(--(active->Layering))
+                return 0;
         }
     #endif
         
@@ -750,20 +753,14 @@ static int WINAPI dwEventCallback(DWORD note)
             node->end = curr;
         
     #ifndef OVERLAPREMOVE
-        #ifdef PFALAYER
-        node = node->backwards_voce;
-        
-        //HACK: is this necessary? probably not
-        //if(node)
-        //    node->overlapped_voce = 0;
-        
-        ActiveNoteList[uid] = node;
-        #else
         node = node->overlapped_voce;
         
-        ActiveNoteListOther[uid] = node;
-        if(!node)
-            ActiveNoteList[uid] = 0;
+        #ifdef PFALAYER
+            active->NoteTop = node;
+        #else
+            active->NoteBottom = node;
+            if(!node)
+                active->NoteTop = 0;
         #endif
     #endif
     }
@@ -1420,16 +1417,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     trackcount *= 256; // 256keys per channel per track
     
-    ActiveNoteList =      malloc(sizeof(size_t) * trackcount);
+    ActiveNoteList = malloc(sizeof(*ActiveNoteList) * trackcount);
     if(!ActiveNoteList)
         puts("No ActiveNoteList, fuck");
-    ZeroMemory(ActiveNoteList,      sizeof(size_t) * trackcount);
-#if !defined(OVERLAPREMOVE) && !defined(PFALAYER)
-    ActiveNoteListOther = malloc(sizeof(size_t) * trackcount);
-    if(!ActiveNoteListOther)
-        puts("No ActiveNoteListOther, fuck");
-    ZeroMemory(ActiveNoteListOther, sizeof(size_t) * trackcount);
-#endif
+    ZeroMemory(ActiveNoteList, sizeof(*ActiveNoteList) * trackcount);
     
     midisize += trackcount * sizeof(size_t);
     
