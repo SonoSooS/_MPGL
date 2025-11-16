@@ -44,7 +44,7 @@
 #define GRACE
 //#define DEBUGTEXT
 //#define EXTREMEDEBUG
-//#define OLDDENSE
+#define OLDDENSE
 #define OVERLAPREMOVE
 //#define PFALAYER
 //#define FILTER_SPAM

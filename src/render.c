@@ -21,9 +21,9 @@
 
 
 #ifdef PIANOKEYS
-const u32 keymul = 8;
+static const u32 keymul = 8;
 #else
-const u32 keymul = 1;
+static const u32 keymul = 1;
 #endif
 
 #ifdef TIMI_CAPTURE
@@ -87,37 +87,6 @@ extern HMODULE KSModule;
 
 extern size_t midisize;
 
-
-static KCOLOR color_blacken1(KCOLOR color)
-{
-#ifndef HDR
-    return ((color & 0xFEFEFE) >> 1) | (color & 0xFF000000);
-#else
-    return (KCOLOR)
-    {
-        color.r * 0.5F,
-        color.g * 0.5F,
-        color.b * 0.5F,
-        color.a,
-    };
-#endif
-}
-
-static KCOLOR color_blacken2(KCOLOR color)
-{
-#ifndef HDR
-    return ((color & 0xFCFCFC) >> 2) | (color & 0xFF000000);
-#else
-    return (KCOLOR)
-    {
-        color.r * 0.25F,
-        color.g * 0.25F,
-        color.b * 0.25F,
-        color.a,
-    };
-#endif
-}
-
 #ifdef TEXTNPS
 struct histogram* hist;
 u64 notecounter;
@@ -159,6 +128,12 @@ struct ActiveNode
     u32 Layering;
     MMTick LastStartTime;
 #endif
+};
+
+struct LineSettings
+{
+    KCOLOR NoteCornersJelly[4];
+    KCOLOR NoteCornersCrust[4];
 };
 
 const size_t szNode = sizeof(NoteNode);
@@ -222,10 +197,98 @@ static NoteNode* VisibleNoteList;
 static NoteNode* VisibleNoteListHead;
 
 static struct ActiveNode* ActiveNoteList;
-static KCOLOR*   colortable;
+static struct LineSettings* LineTable;
+static struct LineSettings LineKeyWhite;
+static struct LineSettings LineKeyBlack;
 
 size_t notealloccount;
 size_t currnotealloc;
+
+static KCOLOR color_blacken1(KCOLOR color)
+{
+#ifndef HDR
+    return ((color & 0xFEFEFE) >> 1) | (color & 0xFF000000);
+#else
+    return (KCOLOR)
+    {
+        color.r * 0.5F,
+        color.g * 0.5F,
+        color.b * 0.5F,
+        color.a,
+    };
+#endif
+}
+
+static KCOLOR color_blacken2(KCOLOR color)
+{
+#ifndef HDR
+    return ((color & 0xFCFCFC) >> 2) | (color & 0xFF000000);
+#else
+    return (KCOLOR)
+    {
+        color.r * 0.25F,
+        color.g * 0.25F,
+        color.b * 0.25F,
+        color.a,
+    };
+#endif
+}
+
+static void LineInstall3(struct LineSettings* __restrict line, KCOLOR color0, KCOLOR color1, KCOLOR crust)
+{
+    #if defined(MMVKEY)
+    line->NoteCornersJelly[0] = color1;
+    line->NoteCornersJelly[1] = color0;
+    line->NoteCornersJelly[2] = color0;
+    line->NoteCornersJelly[3] = color1;
+    #elif defined(PFAKEY)
+    line->NoteCornersJelly[0] = color0;
+    line->NoteCornersJelly[1] = color0;
+    line->NoteCornersJelly[2] = color1;
+    line->NoteCornersJelly[3] = color1;
+    #else
+    line->NoteCornersJelly[0] = color0;
+    line->NoteCornersJelly[1] = color0;
+    line->NoteCornersJelly[2] = color0;
+    line->NoteCornersJelly[3] = color0;
+    #endif
+    
+    line->NoteCornersCrust[0] = crust;
+    line->NoteCornersCrust[1] = crust;
+    line->NoteCornersCrust[2] = crust;
+    line->NoteCornersCrust[3] = crust;
+}
+
+static void LineInstall2(struct LineSettings* __restrict line, KCOLOR color0, KCOLOR color1)
+{
+    LineInstall3(line, color0, color1, color_blacken2(color0));
+}
+
+static void LineInstall1(struct LineSettings* __restrict line, KCOLOR color)
+{
+    LineInstall2(line, color, color_blacken1(color));
+}
+
+static KCOLOR GetPianoColor(bool blackflag)
+{
+    return blackflag
+    
+    #ifndef HDR
+    #ifdef GLOW
+    ? 0xFF111111 : 0xFF808080;
+    #else
+    ? 0xFF202020 : 0xFFFFFFFF;
+    #endif
+    #else
+        #ifndef TRIPPY
+        ? (KCOLOR){ 0.04296875F, 0.04296875F, 0.04296875F, 1.0F }
+        : (KCOLOR){ 0.25F, 0.25F, 0.25F, 1.0F };
+        #else
+        ? (KCOLOR){ 0.06640625F, 0.06640625F, 0.06640625F, 1.0F }
+        : (KCOLOR){ 0.5F, 0.5F, 0.5F, 1.0F };
+        #endif
+    #endif
+}
 
 
 //seems to work properly
@@ -486,6 +549,9 @@ static int WINAPI dwLongMsg(DWORD dwMsg, LPCVOID ptr, DWORD len)
     
     if(((dwMsg == 0x7FFF) || (dwMsg == 0x0AFF)) && len >= 8) // undocumented color meta
     {
+        return 0;
+        
+    #if 0
         LPBYTE data = (LPBYTE)ptr;
         if(data[0] != 0x00 || data[1] != 0x0F) // extended meta
             return 0;
@@ -506,7 +572,7 @@ static int WINAPI dwLongMsg(DWORD dwMsg, LPCVOID ptr, DWORD len)
             j = i + 2;
         }
         
-        KCOLOR* colorbase = &colortable[PlayerReal->CurrentTrack->trackid * (16 << 1)];
+        const struct LineSettings* __restrict line = &LineTable[PlayerReal->CurrentTrack->trackid * (16 << 1)];
         
         KCOLOR color1, color2;
         
@@ -553,6 +619,7 @@ static int WINAPI dwLongMsg(DWORD dwMsg, LPCVOID ptr, DWORD len)
             i += 2;
         }
         while(i < j);
+    #endif
     }
     
     
@@ -768,175 +835,59 @@ static int WINAPI dwEventCallback(DWORD note)
     return 0;
 }
 
-#ifndef OLDDENSE
-static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float offsx, float offsr, const KCOLOR* colors)
+static __attribute__((noinline)) void AddRawVtx(float offsy, float offst, float offsx, float offsr, const struct LineSettings* line)
 {
     if(COMPILER_UNLIKELY(vtxidx >= vertexsize))
-    {
         FlushToilet();
-        //vtxidx = 0;
-    }
-    
-    //offsx -= 0.125F;
     
     struct quad* __restrict ck = quads + (vtxidx++);
-    
-    KCOLOR color1 = colors[0];
-    
-    #if 1
-    
-    #ifdef OUTLINE
-    
-    KCOLOR color2 = colors[1];
-    
-    KCOLOR color3 = color_blacken2(color1);
     
     float origoffsy = offsy;
     float origoffst = offst;
+    float origoffsx = offsx;
+    float origoffsr = offsr;
     
-    offsy += minheight;
-    offst -= minheight;
-    if(offst < offsy)
-    {
-        ck->quads[0] = (struct quadpart){offsx, origoffst, color1};
-        ck->quads[1] = (struct quadpart){offsx, origoffsy, color1};
-        ck->quads[2] = (struct quadpart){offsr, origoffsy, color1};
-        ck->quads[3] = (struct quadpart){offsr, origoffst, color1};
-    }
-    else
-    {
-        ck->quads[0] = (struct quadpart){offsx, origoffst, color3};
-        ck->quads[1] = (struct quadpart){offsx, origoffsy, color3};
-        ck->quads[2] = (struct quadpart){offsr, origoffsy, color3};
-        ck->quads[3] = (struct quadpart){offsr, origoffst, color3};
-        
-        if(COMPILER_UNLIKELY(vtxidx >= vertexsize))
-        {
-            FlushToilet();
-            //vtxidx = 0;
-        }
-        
-        ck = quads + (vtxidx++);
-        
-        const float widthmagic =
+    #ifdef OUTLINE
+    
+    const float widthmagic =
         #ifdef PIANOKEYS
             150.0F * keymul / 1280.0F
         #else
             128.0F * keymul / 1280.0F
         #endif
         ;
-        offsx += widthmagic;
-        offsr -= widthmagic;
-        
-    #ifdef MMVKEY
-        ck->quads[0] = (struct quadpart){offsx, offst, color2};
-        ck->quads[1] = (struct quadpart){offsx, offsy, color1};
-        ck->quads[2] = (struct quadpart){offsr, offsy, color1};
-        ck->quads[3] = (struct quadpart){offsr, offst, color2};
-    #else
-        ck->quads[0] = (struct quadpart){offsx, offst, color1};
-        ck->quads[1] = (struct quadpart){offsx, offsy, color1};
-        ck->quads[2] = (struct quadpart){offsr, offsy, color2};
-        ck->quads[3] = (struct quadpart){offsr, offst, color2};
-    #endif
-        
-    #else
-        #ifdef PFAKEY
-        KCOLOR color2 = colors[1];
-        #else
-        KCOLOR color2 = color1;
-        #endif
     
-    #ifdef MMVKEY
-        ck->quads[0] = (struct quadpart){offsx, offst, color2};
-        ck->quads[1] = (struct quadpart){offsx, offsy, color1};
-        ck->quads[2] = (struct quadpart){offsr, offsy, color1};
-        ck->quads[3] = (struct quadpart){offsr, offst, color2};
+    #ifdef OLDDENSE
+    origoffsy += minheight;
+    origoffst -= minheight;
+    origoffsx += widthmagic;
+    origoffsr -= widthmagic;
     #else
-        ck->quads[0] = (struct quadpart){offsx, offst, color1};
-        ck->quads[1] = (struct quadpart){offsx, offsy, color1};
-        ck->quads[2] = (struct quadpart){offsr, offsy, color2};
-        ck->quads[3] = (struct quadpart){offsr, offst, color2};
-    #endif
-    #endif
-        
-    #ifdef OUTLINE
-    }
+    offsy -= minheight;
+    offst += minheight;
+    offsx -= widthmagic;
+    offsr += widthmagic;
     #endif
     
-    #endif
-}
-#else
-static void AddRawVtx(float offsy, float offst, float offsx, float offsr, const KCOLOR* colors)
-{
-     if(vtxidx == vertexsize)
-    {
+    ck->quads[0] = (struct quadpart){offsx, offst, line->NoteCornersCrust[0]};
+    ck->quads[1] = (struct quadpart){offsx, offsy, line->NoteCornersCrust[1]};
+    ck->quads[2] = (struct quadpart){offsr, offsy, line->NoteCornersCrust[2]};
+    ck->quads[3] = (struct quadpart){offsr, offst, line->NoteCornersCrust[3]};
+    
+    if((origoffst - origoffsy) < minheight)
+        return;
+    
+    if(COMPILER_UNLIKELY(vtxidx >= vertexsize))
         FlushToilet();
-        //vtxidx = 0;
-    }
-    
-    //offsx -= 0.125F;
-    
-    struct quad* __restrict ck = quads + (vtxidx++);
-    
-    #if 1
-    
-    KCOLOR color1 = colors[0];
-    
-    #ifdef OUTLINE
-    
-    KCOLOR color3 = color_blacken2(color1);
-    
-    ck->quads[0] = (struct quadpart){offsx, offst, color3};
-    ck->quads[1] = (struct quadpart){offsx, offsy, color3};
-    ck->quads[2] = (struct quadpart){offsr, offsy, color3};
-    ck->quads[3] = (struct quadpart){offsr, offst, color3};
-    
-    ck++;
-    vtxidx++;
-    
-    offsy += minheight;
-    offst -= minheight;
-    if(offst < offsy)
-    {
-        ck->quads[0] = (struct quadpart){0, 0};
-        ck->quads[1] = (struct quadpart){0, 0};
-        ck->quads[2] = (struct quadpart){0, 0};
-        ck->quads[3] = (struct quadpart){0, 0};
-    }
-    else
-    {
-        const float widthmagic =
-        #ifdef PIANOKEYS
-            150.0F * keymul / 1280.0F
-        #else
-            128.0F * keymul / 1280.0F
-        #endif
-        ;
-        offsx += widthmagic;
-        offsr -= widthmagic;
-    #endif
-        KCOLOR color2 = colors[1];
         
-    #ifdef MMVKEY
-        ck->quads[0] = (struct quadpart){offsx, offst, color2};
-        ck->quads[1] = (struct quadpart){offsx, offsy, color1};
-        ck->quads[2] = (struct quadpart){offsr, offsy, color1};
-        ck->quads[3] = (struct quadpart){offsr, offst, color2};
-    #else
-        ck->quads[0] = (struct quadpart){offsx, offst, color1};
-        ck->quads[1] = (struct quadpart){offsx, offsy, color1};
-        ck->quads[2] = (struct quadpart){offsr, offsy, color2};
-        ck->quads[3] = (struct quadpart){offsr, offst, color2};
-    #endif
-        
-    #ifdef OUTLINE
-    }
+    ck = quads + (vtxidx++);
     #endif
     
-    #endif
+    ck->quads[0] = (struct quadpart){origoffsx, origoffst, line->NoteCornersJelly[0]};
+    ck->quads[1] = (struct quadpart){origoffsx, origoffsy, line->NoteCornersJelly[1]};
+    ck->quads[2] = (struct quadpart){origoffsr, origoffsy, line->NoteCornersJelly[2]};
+    ck->quads[3] = (struct quadpart){origoffsr, origoffst, line->NoteCornersJelly[3]};
 }
-#endif
 
 #ifdef PIANOKEYS
 static const u8 keyoffssesses[] =
@@ -983,7 +934,7 @@ static __attribute__((noinline)) void AddVtx(const NoteNode* __restrict localnod
         offst = ((float)((int)(localnode->end - currtick)) * tickscale) - 1.0F;
     }
     
-    AddRawVtx(offsy, offst, offsx, offsr, &colortable[(localnode->uid >> 8) << 1]);
+    AddRawVtx(offsy, offst, offsx, offsr, &LineTable[localnode->uid >> 8]);
 }
 
 #ifdef DEBUGTEXT
@@ -1185,6 +1136,34 @@ static __attribute__((noinline)) KCOLOR LerpColor(KCOLOR color, KCOLOR def, floa
     #endif
 }
 
+static __attribute__((noinline)) void LerpTable(struct LineSettings* __restrict target, const struct LineSettings* __restrict source, float a)
+{
+#define h(v) target->v = LerpColor(target->v, source->v, a)
+    h(NoteCornersJelly[0]);
+    h(NoteCornersJelly[1]);
+    h(NoteCornersJelly[2]);
+    h(NoteCornersJelly[3]);
+    h(NoteCornersCrust[0]);
+    h(NoteCornersCrust[1]);
+    h(NoteCornersCrust[2]);
+    h(NoteCornersCrust[3]);
+#undef h
+}
+
+static __attribute__((noinline)) void LerpTableSingle(struct LineSettings* __restrict target, KCOLOR source, float a)
+{
+#define h(v) target->v = LerpColor(target->v, source, a)
+    h(NoteCornersJelly[0]);
+    h(NoteCornersJelly[1]);
+    h(NoteCornersJelly[2]);
+    h(NoteCornersJelly[3]);
+    h(NoteCornersCrust[0]);
+    h(NoteCornersCrust[1]);
+    h(NoteCornersCrust[2]);
+    h(NoteCornersCrust[3]);
+#undef h
+}
+
 #endif
 
 static DWORD trackcount;
@@ -1318,11 +1297,11 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     trackcount = PlayerNotecatcher->TrackCount;
     trackcount *= 16; // 16 channels per track
     
-    colortable = malloc(trackcount * 2 * sizeof(*colortable)); // 2 gradient colors
-    if(!colortable)
+    LineTable = malloc(trackcount * sizeof(*LineTable));
+    if(!LineTable)
         puts("No colortable, fuck");
     
-    midisize += sizeof(*colortable) * trackcount * 2;
+    midisize += sizeof(*LineTable) * trackcount;
     
     do
     {
@@ -1334,7 +1313,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         DWORD i = 0;
         
-        while(i < (trackcount * 2))
+        while(i < trackcount)
         {
             DWORD ic = 3;
             
@@ -1358,14 +1337,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             
             
     #ifdef O3COLOR
-            col = dominodark[(((i >> 5) + 6) % (sizeof(dominodark)/sizeof(*dominodark)))] | (0xFF << 24);
+            col = dominodark[(((i >> 5) + 6) % (sizeof(dominodark)/sizeof(*dominodark)))];
             
-            #ifdef HDR
             col = (((col >>  0) & 0xFF) << 16)
                 | (((col >>  8) & 0xFF) <<  8)
                 | (((col >> 16) & 0xFF) <<  0)
                 | (0xFF << 24);
-            #endif
             
             ic = 16;
     #else
@@ -1373,7 +1350,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     #ifdef PFACOLOR
             float light = ((seeds[0] % 20) + 80) / 100.0F;
             float sat = ((seeds[1] % 40) + 60) / 100.0F;
-            col = HSV2RGB((seeds[2] % 360) / 360.0F, sat, light)
+            float hue = (seeds[2] % 360) / 360.0F;
+            col = HSV2RGB(hue, sat, light)
             #ifndef HDR
                 | (0xFF << 24)
             #endif
@@ -1383,34 +1361,32 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             
             do
             {
+                KCOLOR real_color;
             #ifndef HDR
-                colortable[i] = col;
-                
-                #ifdef PFAKEY
-                    colortable[i + 1] = color_blacken1(colortable[i]);
-                #else
-                    colortable[i + 1] = col;
-                #endif
-                
-                i += 2;
+                real_color = col;
             #else
-                colortable[i] = (KCOLOR){
+                real_color = (KCOLOR){
                     (BYTE)(col >> 0) * (1.0F / 255.0F),
                     (BYTE)(col >> 8) * (1.0F / 255.0F),
                     (BYTE)(col >> 16) * (1.0F / 255.0F),
                     1.0F
                 };
-                
-                #ifdef PFAKEY
-                    colortable[i + 1] = color_blacken1(colortable[i]);
-                #else
-                    colortable[i + 1] = colortable[i];
-                #endif
-                
-                i += 2;
             #endif
+                
+                struct LineSettings* __restrict line = &LineTable[i++];
+                
+                LineInstall1(line, real_color);
             }
             while(--ic);
+        }
+        
+        {
+            KCOLOR tmp;
+            
+            tmp = GetPianoColor(0);
+            LineInstall3(&LineKeyWhite, tmp, tmp, color_blacken1(tmp));
+            tmp = GetPianoColor(1);
+            LineInstall3(&LineKeyBlack, tmp, tmp, color_blacken1(tmp));
         }
     }
     while(0);
@@ -2023,27 +1999,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         #endif
         {
             NoteNode* lmn = &KeyNotes[i];
-            KCOLOR dwColor =
-                #ifdef PIANOKEYS
-                    blackflag
-                #else
-                    1
-                #endif
-                #ifndef HDR
-                #ifdef GLOW
-                ? 0xFF111111 : 0xFF808080;
-                #else
-                ? 0xFF202020 : 0xFFFFFFFF;
-                #endif
-                #else
-                    #ifndef TRIPPY
-                    ? (KCOLOR){ 0.04296875F, 0.04296875F, 0.04296875F, 1.0F }
-                    : (KCOLOR){ 0.25F, 0.25F, 0.25F, 1.0F };
-                    #else
-                    ? (KCOLOR){ 0.06640625F, 0.06640625F, 0.06640625F, 1.0F }
-                    : (KCOLOR){ 0.5F, 0.5F, 0.5F, 1.0F };
-                    #endif
-                #endif
+            
+            struct LineSettings dwColor = !blackflag ? LineKeyWhite : LineKeyBlack;
             
             if(lmn->start)
             {
@@ -2060,23 +2017,18 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 {
                     float grayalpha = coloralpha < 1.0F ? coloralpha : 1.0F;
                     #ifndef HDR
-                    dwColor = LerpColor(dwColor, 0xFFFFFFFF, grayalpha);
+                    LerpTableSingle(&dwColor, 0xFFFFFFFF, grayalpha);
                     #else
-                    dwColor = LerpColor(dwColor, (KCOLOR){ 1.0F, 1.0F, 1.0F, 1.0F }, grayalpha);
+                    LerpTableSingle(&dwColor, (KCOLOR){ 1.0F, 1.0F, 1.0F, 1.0F }, grayalpha);
                     #endif
                 }
                 #endif
                 
-                dwColor = LerpColor(dwColor, colortable[(lmn->uid >> 8) << 1], coloralpha)
-                #ifndef HDR
-                | (0xFF << 24)
-                #endif
-                ;
+                LerpTable(&dwColor, &LineTable[lmn->uid >> 8], coloralpha);
                 
                 #ifdef HDR
                 shalpha[i] = coloralpha;
-                //shcolor[i] = dwColor;
-                shcolor[i] = colortable[(lmn->uid >> 8) << 1];
+                shcolor[i] = LineTable[lmn->uid >> 8].NoteCornersJelly[1]; //HACK: save base color?
                 #endif
                 
                 if(lmn->start > delta)
@@ -2102,11 +2054,8 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             
             #ifndef NOKEYBOARD
             
-            KCOLOR kbcolors[2];
-            kbcolors[0] = dwColor;
-            kbcolors[1] = color_blacken1(dwColor);
             
-            //AddRawVtx(1.0F, !blackflag ? 1.15F : 1.25F, posflag, posflag + 2, &colortable[(KeyNotes[i].uid >> 8) << 1]);
+            //AddRawVtx(1.0F, !blackflag ? 1.15F : 1.25F, posflag, posflag + 2, &colortable[(KeyNotes[i].uid >> 8) << 1]); // ???
             AddRawVtx(
             #ifdef PIANOKEYS
                 blackflag
@@ -2120,7 +2069,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             #else
                 posflag, posflag + 1
             #endif
-                , kbcolors);
+                , &dwColor);
             #endif
             
             #ifdef PIANOKEYS
