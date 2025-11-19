@@ -11,6 +11,8 @@ typedef uint32_t u32;
 typedef int64_t s64;
 typedef uint64_t u64;
 
+#define ARRAY_LVALUE(dst,src) memcpy(dst,src,sizeof dst)
+
 #define COMPILER_LIKELY(expr) __builtin_expect(!!(expr), 1)
 #define COMPILER_UNLIKELY(expr) __builtin_expect(!!(expr), 0)
 

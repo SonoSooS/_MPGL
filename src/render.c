@@ -134,6 +134,7 @@ struct LineSettings
 {
     KCOLOR NoteCornersJelly[4];
     KCOLOR NoteCornersCrust[4];
+    KCOLOR BaseColor;
 };
 
 const size_t szNode = sizeof(NoteNode);
@@ -234,6 +235,35 @@ static KCOLOR color_blacken2(KCOLOR color)
 #endif
 }
 
+static KCOLOR color_FromNative(DWORD color)
+{
+#ifdef HDR
+    return (KCOLOR)
+    {
+        (BYTE)(color >> 0) / 255.0F,
+        (BYTE)(color >> 8) / 255.0F,
+        (BYTE)(color >> 16) / 255.0F,
+        (BYTE)(color >> 24) / 255.0F
+    };
+#else
+    return color;
+#endif
+}
+
+static KCOLOR color_FromRGB(DWORD color)
+{
+    color = 0
+        | (((color >> 16) & 0xFF) <<  0)
+        | (((color >>  8) & 0xFF) <<  8)
+        | (((color >>  0) & 0xFF) << 16)
+        | (color & 0xFF000000);
+    
+    if(!(color & 0xFF000000))
+        color |= 0xFF000000;
+    
+    return color_FromNative(color);
+}
+
 static void LineInstall3(struct LineSettings* __restrict line, KCOLOR color0, KCOLOR color1, KCOLOR crust)
 {
     #if defined(MMVKEY)
@@ -257,6 +287,8 @@ static void LineInstall3(struct LineSettings* __restrict line, KCOLOR color0, KC
     line->NoteCornersCrust[1] = crust;
     line->NoteCornersCrust[2] = crust;
     line->NoteCornersCrust[3] = crust;
+    
+    line->BaseColor = color0;
 }
 
 static void LineInstall2(struct LineSettings* __restrict line, KCOLOR color0, KCOLOR color1)
@@ -1150,9 +1182,23 @@ static __attribute__((noinline)) void LerpTable(struct LineSettings* __restrict 
 #undef h
 }
 
+#define h(v) target->v = LerpColor(target->v, source, a)
+static __attribute__((noinline)) void LerpTableSingleJelly(struct LineSettings* __restrict target, KCOLOR source, float a)
+{
+    h(NoteCornersJelly[0]);
+    h(NoteCornersJelly[1]);
+    h(NoteCornersJelly[2]);
+    h(NoteCornersJelly[3]);
+}
+static __attribute__((noinline)) void LerpTableSingleCrust(struct LineSettings* __restrict target, KCOLOR source, float a)
+{
+    h(NoteCornersCrust[0]);
+    h(NoteCornersCrust[1]);
+    h(NoteCornersCrust[2]);
+    h(NoteCornersCrust[3]);
+}
 static __attribute__((noinline)) void LerpTableSingle(struct LineSettings* __restrict target, KCOLOR source, float a)
 {
-#define h(v) target->v = LerpColor(target->v, source, a)
     h(NoteCornersJelly[0]);
     h(NoteCornersJelly[1]);
     h(NoteCornersJelly[2]);
@@ -1161,8 +1207,8 @@ static __attribute__((noinline)) void LerpTableSingle(struct LineSettings* __res
     h(NoteCornersCrust[1]);
     h(NoteCornersCrust[2]);
     h(NoteCornersCrust[3]);
-#undef h
 }
+#undef h
 
 #endif
 
@@ -2001,10 +2047,10 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             NoteNode* lmn = &KeyNotes[i];
             
             struct LineSettings dwColor = !blackflag ? LineKeyWhite : LineKeyBlack;
+            float coloralpha = (float)lmn->start * 0.0000001F;
             
             if(lmn->start)
             {
-                float coloralpha = (float)lmn->start * 0.0000001F;
                 
                 #ifdef GLOW
                 if(!(
@@ -2016,19 +2062,17 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 ))
                 {
                     float grayalpha = coloralpha < 1.0F ? coloralpha : 1.0F;
-                    #ifndef HDR
-                    LerpTableSingle(&dwColor, 0xFFFFFFFF, grayalpha);
-                    #else
-                    LerpTableSingle(&dwColor, (KCOLOR){ 1.0F, 1.0F, 1.0F, 1.0F }, grayalpha);
-                    #endif
+                    LerpTableSingle(&dwColor, LineKeyBlack.BaseColor, grayalpha);
                 }
                 #endif
                 
-                LerpTable(&dwColor, &LineTable[lmn->uid >> 8], coloralpha);
+                //LerpTable(&dwColor, &LineTable[lmn->uid >> 8], coloralpha);
+                LerpTableSingleJelly(&dwColor, LineTable[lmn->uid >> 8].BaseColor, coloralpha * 0.50F);
+                LerpTableSingleCrust(&dwColor, LineTable[lmn->uid >> 8].BaseColor, coloralpha * 0.25F);
                 
                 #ifdef HDR
                 shalpha[i] = coloralpha;
-                shcolor[i] = LineTable[lmn->uid >> 8].NoteCornersJelly[1]; //HACK: save base color?
+                shcolor[i] = LineTable[lmn->uid >> 8].BaseColor;
                 #endif
                 
                 if(lmn->start > delta)
