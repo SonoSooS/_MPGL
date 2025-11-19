@@ -201,6 +201,7 @@ static struct ActiveNode* ActiveNoteList;
 static struct LineSettings* LineTable;
 static struct LineSettings LineKeyWhite;
 static struct LineSettings LineKeyBlack;
+static struct LineSettings LineBar;
 
 size_t notealloccount;
 size_t currnotealloc;
@@ -309,7 +310,7 @@ static KCOLOR GetPianoColor(bool blackflag)
     #ifdef GLOW
     ? 0xFF111111 : 0xFF808080;
     #else
-    ? 0xFF202020 : 0xFFFFFFFF;
+    ? 0xFF202020 : 0xFFF0F0F0;
     #endif
     #else
         #ifndef TRIPPY
@@ -1430,9 +1431,21 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             KCOLOR tmp;
             
             tmp = GetPianoColor(0);
-            LineInstall3(&LineKeyWhite, tmp, tmp, color_blacken1(tmp));
+            LineInstall3(&LineKeyWhite, tmp, color_blacken1(tmp), color_FromNative(0xFF404040));
+            LineKeyWhite.NoteCornersJelly[0] = color_blacken1(tmp);
+            LineKeyWhite.NoteCornersJelly[1] = tmp;
+            LineKeyWhite.NoteCornersJelly[2] = tmp;
+            LineKeyWhite.NoteCornersJelly[3] = LineKeyWhite.NoteCornersJelly[0];
+            
             tmp = GetPianoColor(1);
             LineInstall3(&LineKeyBlack, tmp, tmp, color_blacken1(tmp));
+            ARRAY_LVALUE(LineKeyWhite.NoteCornersCrust, LineKeyBlack.NoteCornersJelly);
+            LineKeyBlack.NoteCornersJelly[0] = color_FromNative(0xC0242424);
+            LineKeyBlack.NoteCornersJelly[1] = tmp;
+            LineKeyBlack.NoteCornersJelly[2] = color_FromNative(0xFF242424);
+            LineKeyBlack.NoteCornersJelly[3] = tmp;
+            
+            LineInstall1(&LineBar, color_FromRGB(0xFFAB2330));
         }
     }
     while(0);
@@ -2025,6 +2038,14 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             delta = 100000; // 10ms
         
         #ifdef PIANOKEYS
+        #if 1
+            AddRawVtx(
+                -1.05F, -1.0F,
+                0.0F,
+                600.0F
+                , &LineBar);
+        #endif
+        
         BOOL blackflag = FALSE;
         int keyflag = 0;
         int posflag = 0;
@@ -2098,22 +2119,47 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             
             #ifndef NOKEYBOARD
             
+            float offt =
+            #if 1
+                -1.04F
+            #else
+                -1.0F
+            #endif
+            ;
+            float offy = blackflag ? -1.30F : -1.5F;
+            float range = offy;
+            
+            float tall = (offy - offt);
+            
+            if(blackflag)
+                offt += (coloralpha - 1.0F) * tall * 0.1F * 0.5F;
+            offy += (coloralpha - 1.0F) * tall * 0.1F;
+            
+            if(!blackflag && (offy > range))
+            {
+                struct LineSettings underkey = dwColor;
+                LerpTableSingle(&underkey, LineKeyBlack.BaseColor, 0.375F);
+                
+                AddRawVtx(
+                range, offy,
+                #ifdef PIANOKEYS
+                    offsx, offsr
+                #else
+                    posflag, posflag + 1
+                #endif
+                    , &underkey);
+            }
             
             //AddRawVtx(1.0F, !blackflag ? 1.15F : 1.25F, posflag, posflag + 2, &colortable[(KeyNotes[i].uid >> 8) << 1]); // ???
             AddRawVtx(
-            #ifdef PIANOKEYS
-                blackflag
-            #else
-                0
-            #endif
-                ? -1.30F : -1.5F
-                , -1.0F,
+                offy, offt,
             #ifdef PIANOKEYS
                 offsx, offsr
             #else
                 posflag, posflag + 1
             #endif
                 , &dwColor);
+            
             #endif
             
             #ifdef PIANOKEYS
