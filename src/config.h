@@ -46,6 +46,7 @@
 //#define EXTREMEDEBUG
 #define OLDDENSE
 #define OVERLAPREMOVE
+//#define DENSEMERGE
 //#define PFALAYER
 //#define FILTER_SPAM
 

@@ -125,6 +125,9 @@ struct ActiveNode
     NoteNode* NoteBottom;
 #endif
 #ifdef OVERLAPREMOVE
+#ifdef DENSEMERGE
+    NoteNode* Dense;
+#endif
     u32 Layering;
     MMTick LastStartTime;
 #endif
@@ -799,6 +802,15 @@ static int WINAPI dwEventCallback(DWORD note)
                 backupnode->end = ~0;
                 return 0;
             }
+        #ifdef DENSEMERGE
+            else if((active->LastStartTime + 1) == curr)
+            {
+                active->LastStartTime = curr;
+                
+                backupnode->end = ~0;
+                return 0;
+            }
+        #endif
             
             if(!~backupnode->end)
                 backupnode->end = curr;
