@@ -209,13 +209,18 @@ size_t currnotealloc;
 static KCOLOR color_blacken1(KCOLOR color)
 {
 #ifndef HDR
-    return ((color & 0xFEFEFE) >> 1) | (color & 0xFF000000);
+    return
+    (
+        ((color & 0xFEFEFE) >> 1)
+        +
+        ((color & 0xF0F0F0) >> 4)
+    ) | (color & 0xFF000000);
 #else
     return (KCOLOR)
     {
-        color.r * 0.5F,
-        color.g * 0.5F,
-        color.b * 0.5F,
+        color.r * 0.625F,
+        color.g * 0.625F,
+        color.b * 0.625F,
         color.a,
     };
 #endif
