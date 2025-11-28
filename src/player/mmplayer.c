@@ -8,14 +8,15 @@
 #include "bh.h"
 #endif
 
-__declspec(noinline) u8* varlen_decode_slow(u8* ptr, u32* __restrict out, u8 data)
+__declspec(noinline) static u8* varlen_decode_slow(u8* __restrict ptr, u32* __restrict out, u8 data)
 {
-    u32 result = (data & 0x7F) << 7;
+    u32 result = 0;
+    result = (result + (data - 0x80)) << 7;
     
     data = *(ptr++); if(data < 0x80) {goto done;}
-    result = (result + (data & 0x7F)) << 7;
+    result = (result + (data - 0x80)) << 7;
     data = *(ptr++); if(data < 0x80) {goto done;}
-    result = (result + (data & 0x7F)) << 7;
+    result = (result + (data - 0x80)) << 7;
     //WTF, varlen is undefined above 28bits, it's invalid to have bit7 set for the 4th byte
     data = *(ptr++); goto done;
     
@@ -25,7 +26,7 @@ done:
     return ptr;
 }
 
-__forceinline u8* varlen_decode(u8* ptr, u32* __restrict out)
+__forceinline u8* varlen_decode(u8* __restrict ptr, u32* __restrict out)
 {
     u8 data = *(ptr++);
     if(__builtin_expect(data < 0x80, 1))
