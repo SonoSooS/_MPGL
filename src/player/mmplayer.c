@@ -222,7 +222,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 }
 #endif
                 
-                if(swcmd < 0xC0)
+                if(COMPILER_LIKELY(swcmd < 0xC0))
                 {
                 msg_2b:
                     msg.prm1 = *(ptrs++);
