@@ -71,7 +71,7 @@ static void mmtimer_init_default(struct MMTimer* __restrict timer)
     mmtimer_reset(timer, 0);
 }
 
-__declspec(noinline) static u8* varlen_decode_slow(u8* __restrict ptr, u32* __restrict out, u8 data)
+__declspec(noinline) u8* varlen_decode_slow(u8* __restrict ptr, u32* __restrict out, u8 data)
 {
     u32 result = 0;
     result = (result + (data - 0x80)) << 7;
@@ -303,7 +303,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                     goto msg_2b;
                 }
                 
-                if(msg.cmd == 0xFF) // meta
+                if(swcmd == 0xFF) // meta
                 {
                     u8 meta = *(ptrs++);
                     u32 metalen;
@@ -332,7 +332,8 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                     ptrs += metalen;
                     goto cmdend;
                 }
-                if(msg.cmd == 0xF0) // SysEx
+                
+                if(swcmd == 0xF0) // SysEx
                 {
                     u32 metalen;
                     ptrs = varlen_decode(ptrs, &metalen);
