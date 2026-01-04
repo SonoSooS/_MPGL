@@ -465,7 +465,7 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
     midisize = fs.QuadPart;
     
     #ifdef MIDI_MMIO
-    filemap = CreateFileMappingA(f, NULL, PAGE_READONLY, 0, 0, NULL);
+    filemap = CreateFileMappingA(f, NULL, PAGE_WRITECOPY, 0, 0, NULL);
     if(!filemap)
     {
         CloseHandle(f);
@@ -473,7 +473,7 @@ static MMPlayer* CreatePlayer(LPCWCH testpath)
         return 0;
     }
     
-    BYTE* ptr = MapViewOfFile(filemap, FILE_MAP_COPY, 0, 0, 0);
+    BYTE* ptr = MapViewOfFile(filemap, FILE_MAP_READ | FILE_MAP_COPY, 0, 0, 0);
     BYTE* dstptr = ptr + fs.QuadPart;
     #else
     
