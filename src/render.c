@@ -403,10 +403,6 @@ static void NoteSync(MMPlayer* syncplayer, DWORD dwDelta)
 #ifdef TEXTNPS
 
 struct histogram *hist = 0;
-u32 histlast = 0;
-u32 histwrite = 0;
-MMTick histsum = 0;
-MMTick histdelay = 0;
 MMTick onehztimer = 0;
 u64 currnote = 0;
 u64 currnps = 0;
@@ -466,8 +462,9 @@ static int WINAPI kNPIntercept(DWORD note)
 
 static void WINAPI kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
 {
-    struct histogram* __restrict hhist = hist + (histwrite++);
-    if(histwrite == (DWORD)1e7)
+    u32 histwrite = hist->index_in;
+    struct histogram_data* __restrict hhist = hist->data + histwrite;
+    if(++histwrite >= hist->count)
         histwrite = 0;
     
     hhist->delta = dwDelta * syncplayer->tempo * 10 / syncplayer->timediv;
@@ -476,19 +473,24 @@ static void WINAPI kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
     currnps += currnote;
     notecounter += currnote;
     
-    struct histogram* __restrict ihist;
+    hist->index_in = histwrite;
     
-    while(onehztimer > (DWORD)1e7)
+    struct histogram_data* __restrict ihist;
+    histwrite = hist->index_out;
+    
+    while(onehztimer > (DWORD)1e7) // exclusive, so stats stay for more than one frame
     {
-        ihist = hist + (histlast++);
-        if(histlast == (DWORD)1e7)
-            histlast = 0;
+        ihist = hist->data + histwrite;
+        if(++histwrite >= hist->count)
+            histwrite = 0;
         
         onehztimer -= ihist->delta;
         currnps -= ihist->count;
     }
     
     onehztimer += hhist->delta;
+    
+    hist->index_out = histwrite;
     
     currnote = 0;
     

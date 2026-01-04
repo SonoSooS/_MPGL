@@ -593,10 +593,18 @@ void grfInstallShader(void)
     glDeleteShader(psh);
     
     #ifdef TEXTNPS
-    hist = malloc((DWORD)1e7 * sizeof(*hist));
-    ZeroMemory(hist, (DWORD)1e7 * sizeof(*hist));
-    midisize += (DWORD)1e7 * sizeof(*hist);
-    notecounter = 0;
+    {
+        DWORD hist_count = 10000000;
+        hist = malloc(sizeof(*hist) + (hist_count * sizeof(*hist->data)));
+        ZeroMemory(hist, sizeof(*hist));
+        ZeroMemory(hist->data, hist_count * sizeof(*hist->data));
+        hist->count = hist_count;
+        
+        midisize += hist_count * sizeof(*hist);
+        midisize += sizeof(*hist);
+        
+        notecounter = 0;
+    }
     #endif
 }
 
