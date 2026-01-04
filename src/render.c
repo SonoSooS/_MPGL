@@ -48,10 +48,6 @@ const float minheight = (1.0F / 256.0F)
 __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 #endif
 
-#if !defined(GLTEXT) && (defined(TEXTNPS))
-#error This feature combination requires GLTEXT
-#endif
-
 #ifdef DYNASCROLL
 
 #define TICKVAL syncvalue
@@ -547,9 +543,7 @@ static __attribute__((noinline)) void FlushToilet()
 {
     if(vtxidx)
     {
-        #ifdef GLTEXT
         drawnotesraw += vtxidx;
-        #endif
         glBufferSubData(GL_ARRAY_BUFFER, 0, vtxidx * sizeof(*quads), quads);
         glDrawElements(GL_TRIANGLES, vtxidx * NOTEVTX, GL_UNSIGNED_INT, 0);
         vtxidx = 0;
@@ -1472,10 +1466,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     //trackcount >>= 12; // undo 16 * 256
     
     grInstallShader();
-    
-    #ifdef GLTEXT
     grfInstallShader();
-    #endif
     
     quads = 0;
     GLuint* indexes = 0;
@@ -1687,7 +1678,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     FPS_capture = TRUE;
     #endif
     
-    #if defined(WMA_SIZE) && defined(GLTEXT)
+    #if defined(WMA_SIZE)
     fps_wma = malloc(sizeof(*fps_wma)* WMA_SIZE);
     memset(fps_wma, 0, sizeof(*fps_wma) * WMA_SIZE);
     fps_wmai = 0;
@@ -1758,9 +1749,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         BIND_IF(glUniform1f, attrGrNotemix, 0.0F);
         
-        #ifdef GLTEXT
         drawnotesraw = 0;
-        #endif
         
         #ifdef DYNASCROLL
         ULONGLONG notesync = mmnotesync;
@@ -1954,9 +1943,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         if(vtxidx)
             FlushToilet();
         
-        #ifdef GLTEXT
         drawnotes = drawnotesraw + vtxidx;
-        #endif
         
         #ifdef DEBUGTEXT
         BIND_IF(glUniform1f, attrGrNotemix, 0.0F);
@@ -2222,22 +2209,19 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         //glDrawArrays(GL_TRIANGLES, 0, 3);
         //glDrawElements(GL_TRIANGLES, 6 * vtxidx, GL_UNSIGNED_INT, indexes);
         
-        #ifndef GLTEXT
         if(notealloccount != currnotealloc)
         {
+            //TODO: do anything when this changes?
             currnotealloc = notealloccount;
-            printf("Note allocation changed: %14llu\n", currnotealloc);
+            //printf("Note allocation changed: %14llu\n", currnotealloc);
         }
-        #endif
         
         glDisableVertexAttribArray(attrGrVertex);
         glDisableVertexAttribArray(attrGrColor);
         
     //topkek:
         
-        #ifdef GLTEXT
         grfDrawFontOverlay();
-        #endif
         
         glUseProgram(0);
         //glFlush();
@@ -2270,7 +2254,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             timeout = 0;
         #endif
         
-        #if defined(WMA_SIZE) && defined(GLTEXT)
+        #if defined(WMA_SIZE)
         fps_wma[fps_wmai] = currtime - prevtime;
         if(++fps_wmai == WMA_SIZE)
             fps_wmai = 0;

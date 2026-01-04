@@ -25,7 +25,6 @@
 //#define TRIPPY
 //#define WIDEMIDI
 #define GLOW
-#define GLTEXT
 #define TEXTNPS
 //#define HDR
 //#define NOKEYBOARD
