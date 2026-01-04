@@ -474,7 +474,7 @@ static void WINAPI kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
     if(histwrite == (DWORD)1e7)
         histwrite = 0;
     
-    hhist->delta = dwDelta * syncplayer->tempomulti;
+    hhist->delta = dwDelta * syncplayer->tempo * 10 / syncplayer->timediv;
     hhist->count = currnote;
     
     currnps += currnote;
@@ -1621,8 +1621,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     PlayerNotecatcher->KLongMsg = 0;//LongMessage;
     PlayerNotecatcher->KSyncFunc = NoteReturn;
     
-    PlayerReal->SleepTimeMax = 0;
-    PlayerReal->SleepTicks = 1;
+    PlayerReal->SleepTicksMax = 1;
     PlayerReal->KLongMsg = dwLongMsg;
     
     
@@ -1790,12 +1789,14 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         ULONGLONG notesync = mmnotesync;
         ULONGLONG currtick = syncvalue;
         #else
-        DWORD tickheight =
+        ULONGLONG tickheight =
         #ifdef CUSTOMTICK
         CUSTOMTICK
         ;
         #else
-        (2500000) / PlayerReal->tempomulti;
+        (250000ull) * PlayerReal->timediv / (PlayerReal->tempo);
+        if(!tickheight)
+            tickheight = 1;
         #endif
         ULONGLONG notesync = TICKVAR;
         ULONGLONG currtick = TICKVAL;

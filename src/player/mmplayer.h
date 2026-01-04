@@ -13,6 +13,16 @@ typedef int(WINAPI*cbMMShortMsg)(DWORD msg);
 typedef int(WINAPI*cbMMLongMsg)(DWORD msg, LPCVOID buf, DWORD len);
 typedef void(WINAPI*cbMMSync)(MMPlayer* player, DWORD deltaTicks);
 
+struct MMTimer
+{
+    MMTick previous_current_time;
+    MMTick previous_wanted_elapsed_time;
+    s64 sleep_offset_error;
+    s64 max_offset_error;
+};
+
+
+
 union MMEvent
 {
     struct
@@ -38,14 +48,11 @@ struct MMPlayer
 {
     MMTick TickCounter;
     s64 RealTime;
-    u32 SleepTimeMax;
-    u32 SleepTicks;
-    u32 _pad;
+    u32 SleepTicksMax;
     u32 TrackCount;
     MMTrack* tracks;
     MMTrack* CurrentTrack;
     u32 tempo;
-    u32 tempomulti;
     u32 timediv;
     bool done;
     cbMMShortMsg KShortMsg;
@@ -54,10 +61,7 @@ struct MMPlayer
     s64* SyncPtr;
     s64 SyncOffset;
     s64 RealTimeUndiv;
-#ifdef DEBUGTEXT
-    s32 _debug_deltasleep;
-    s32 _debug_sleeptime;
-#endif
+    struct MMTimer timer;
 };
 
 MMPlayer* mmpDuplicatePlayer(const MMPlayer* other);

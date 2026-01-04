@@ -364,9 +364,9 @@ void grfDrawFontOverlay(void)
     textlen = sprintf(buf, "TPS:   %f", 1e6 * PlayerReal->timediv / (double)PlayerReal->tempo);
     grfDrawFontString(-128, -54, 2, -1, buf);
     
-    textlen = sprintf(buf, "Sleep: %14.14s", _commanumber(PlayerReal->_debug_sleeptime));
+    textlen = sprintf(buf, "Sleep: %14.14s", _commanumber(PlayerReal->timer.previous_wanted_elapsed_time));
     grfDrawFontString(TEXTLOFFS(2), ybase - 6, 2, -1, buf);
-    textlen = sprintf(buf, "Delta: %14.14s", _commanumber(PlayerReal->_debug_deltasleep));
+    textlen = sprintf(buf, "Delta: %14.14s", _commanumber(PlayerReal->timer.sleep_offset_error));
     grfDrawFontString(TEXTLOFFS(2), ybase - 8, 2, -1, buf);
     
     
