@@ -771,11 +771,11 @@ __attribute__((no_instrument_function)) int main(int argc, char** argv)
         if(gLayers)
         {
             void(WINAPI*KDFlags)(DWORD) = (void*)GetProcAddress(ks, "syninit_SetFlagsKDM");
-            if(KDFlags)
+            if(KDFlags && 0)
             {
                 puts("Disabling syndrv KDMAPI thread");
-                //KDFlags(1);
-                //player->KSyncFunc = PlayerSyncFunc;
+                KDFlags(1);
+                player->KSyncFunc = PlayerSyncFunc;
             }
         }
         
