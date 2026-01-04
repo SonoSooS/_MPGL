@@ -24,7 +24,6 @@
 #define KEYBOARD
 //#define TRIPPY
 //#define WIDEMIDI
-//#define TIMI_TIEMR
 #define GLOW
 #define GLTEXT
 #define TEXTNPS

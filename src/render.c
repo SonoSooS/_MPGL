@@ -667,14 +667,6 @@ static int WINAPI dwLongMsg(DWORD dwMsg, LPCVOID ptr, DWORD len)
     return 0;
 }
 
-#ifdef TIMI_TIEMR
-static int timiTimerFunc(PULONGLONG timeout)
-{
-    *timeout = PlayerReal->RealTime;
-    return 0;
-}
-#endif
-
 #ifdef TIMI_CAPTURE
 static int WINAPI FPS_ShortMsg(DWORD note)
 {
@@ -1655,21 +1647,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     
     syncvalue = 0;
     mmnotesync = 0;
-    #endif
-    #ifdef TIMI_TIEMR
-    ULONGLONG timersync = ~0;
-    timersync = timersync >> 2;
-    do
-    {
-        void(WINAPI*timisettimer)(void* func) = (void*)GetProcAddress(KSModule, "timidrwSetTimeFunc");
-        if(timisettimer)
-        {
-            timisettimer((void*)timiTimerFunc);
-            PlayerReal->SyncPtr = (LONGLONG*)&timersync;
-            PlayerReal->SyncOffset = 0;
-        }
-    }
-    while(0);
     #endif
     
     #ifdef TIMI_CAPTURE
