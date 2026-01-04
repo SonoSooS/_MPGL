@@ -361,7 +361,7 @@ void grfDrawFontOverlay(void)
     textlen = sprintf(buf, "Ticks: %llu", PlayerReal->TickCounter);
     grfDrawFontString(-128, -56, 2, -1, buf);
     
-    textlen = sprintf(buf, "TPS:   %f", 1e6 * PlayerReal->timediv / (double)PlayerReal->tempo);
+    textlen = sprintf(buf, "TPS:   %f", 1000000ull * PlayerReal->timediv / (double)PlayerReal->tempo);
     grfDrawFontString(-128, -54, 2, -1, buf);
     
     textlen = sprintf(buf, "Sleep: %14.14s", _commanumber(PlayerReal->timer.previous_wanted_elapsed_time));

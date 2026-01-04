@@ -485,10 +485,10 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 counter += minsleep;
                 player->TickCounter = counter;
                 
-                u64 sleeptime = (u64)minsleep * player->tempo * 10;
+                u64 sleeptime = (u64)minsleep * player->tempo;
                 player->RealTimeUndiv += sleeptime;
                 
-                sleeptime /= (u64)player->timediv;
+                sleeptime = sleeptime / player->timediv;
                 player->RealTime += sleeptime;
                 
                 if(player->KSyncFunc)
@@ -498,7 +498,7 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 {
                     u64 time;
                     NtQuerySystemTime(&time);
-                    should_sleep_time = mmtimer_get(timer, time, sleeptime);
+                    should_sleep_time = mmtimer_get(timer, time, sleeptime * 10);
                 }
                 
                 if(should_sleep_time)
@@ -524,10 +524,10 @@ DWORD WINAPI PlayerThread(PVOID lpParameter)
                 counter += minsleep;
                 player->TickCounter = counter;
                 
-                u64 sleeptime = (u64)minsleep * player->tempo * 10;
+                u64 sleeptime = (u64)minsleep * player->tempo;
                 player->RealTimeUndiv += sleeptime;
                 
-                sleeptime /= player->timediv;
+                sleeptime = sleeptime / player->timediv;
                 player->RealTime += sleeptime;
                 
                 if(player->KSyncFunc)

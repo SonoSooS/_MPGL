@@ -963,7 +963,7 @@ static void pianokey(float* __restrict offsx, float* __restrict offsr, u8 num)
 }
 #endif
 
-static __attribute__((noinline)) void AddVtx(const NoteNode* __restrict localnode, ULONGLONG currtick, float tickscale)
+static __attribute__((noinline)) void AddVtx(const NoteNode* __restrict localnode, MMTick currtick, float tickscale)
 {
     #ifdef PIANOKEYS
     float offsx;
@@ -988,7 +988,7 @@ static __attribute__((noinline)) void AddVtx(const NoteNode* __restrict localnod
 }
 
 #ifdef DEBUGTEXT
-static __attribute__((noinline)) void AddWideVtx(ULONGLONG start, float height, ULONGLONG currtick, float tickscale, DWORD range, DWORD color)
+static __attribute__((noinline)) void AddWideVtx(MMTick start, float height, MMTick currtick, float tickscale, DWORD range, DWORD color)
 {
     #ifdef PIANOKEYS
     float offsx;
@@ -1905,11 +1905,11 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             if(lmn->uid != currnote->uid)
             {
                 lmn->uid = currnote->uid;
-                lmn->start = 14000000;
-                //lmn->start = 21000000;
+                lmn->start = 1400000;
+                //lmn->start = 2100000;
             }
-            else if(lmn->start < 10000000)
-                lmn->start = 10000000;
+            else if(lmn->start < 1000000)
+                lmn->start = 1000000;
         #endif
             
             if(currnote->end > currtick) //note not finished yet
@@ -2045,15 +2045,15 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         AddRawVtx(-1.02, -0.98, 0, 600, (KCOLOR){1.0, 0.0, 0.0, 1});
         #endif
         
-        ULONGLONG delta = 40000000;
+        ULONGLONG delta = 4000000;
         
-        if((currtimer - lasttimer) < 2500000) // 250ms
+        if((currtimer - lasttimer) < 250000) // 250ms
             //delta = (currtimer - lasttimer) * 8;
             delta = (currtimer - lasttimer) * 6;
             //delta = (currtimer - lasttimer) * 3;
         
         if(!delta)
-            delta = 100000; // 10ms
+            delta = 10000; // 10ms
         
         #ifdef PIANOKEYS
         #if 1
@@ -2086,7 +2086,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             NoteNode* lmn = &KeyNotes[i];
             
             struct LineSettings dwColor = !blackflag ? LineKeyWhite : LineKeyBlack;
-            float coloralpha = (float)lmn->start * 0.0000001F;
+            float coloralpha = (float)lmn->start * 0.000001F;
             
             if(lmn->start)
             {
