@@ -48,26 +48,11 @@ const float minheight = (1.0F / 256.0F)
 __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 #endif
 
-#ifdef DYNASCROLL
-
-#define TICKVAL syncvalue
-#define TICKVAR mmnotesync
-
-#define tickheight 40000
-
-const float tickscale = 1.0F / (float)tickheight;
-const u32 minwidth = tickheight / 32;
-
-#else
-const u32 minwidth = 16;
 #ifdef TIMI_CUSTOMSCROLL
 #define TICKVAL FPS_scroll
 #else
 #define TICKVAL PlayerReal->TickCounter
 #endif
-#define TICKVAR PlayerNotecatcher->TickCounter
-#endif
-
 
 
 extern HWND glwnd;
@@ -109,6 +94,10 @@ struct NoteNode
 #endif
     MMTick start;
     MMTick end;
+#ifdef DYNASCROLL
+    MMTick time_start;
+    MMTick time_end;
+#endif
     u32 uid;
     u32 layering;
 };
@@ -386,19 +375,6 @@ static void NoteFree(NoteNode* __restrict node)
     freelist = node;
 }
 
-#ifdef DYNASCROLL
-static MMTick syncvalue;
-
-static void NoteSync(MMPlayer* syncplayer, DWORD dwDelta)
-{
-    if(dwDelta)
-    {
-        DWORD dwValue = 60000000 / syncplayer->tempo;
-        //while(dwDelta--)
-            syncvalue += (ULONGLONG)dwValue * (ULONGLONG)dwDelta;
-    }
-}
-#endif
 
 #ifdef TEXTNPS
 
@@ -494,11 +470,6 @@ static void WINAPI kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
     
     currnote = 0;
     
-    /*
-    #ifdef DYNASCROLL
-    return NoteSync(syncplayer, dwDelta);
-    #endif
-    */
     
     if(kNSOriginal)
         kNSOriginal(syncplayer, dwDelta);
@@ -507,21 +478,8 @@ static void WINAPI kNPSync(MMPlayer* syncplayer, DWORD dwDelta)
 
 static DWORD returnfailcount;
 
-#ifdef DYNASCROLL
-static MMTick mmnotesync;
-#endif
-
 static void WINAPI NoteReturn(MMPlayer* syncplayer, DWORD dwDelta)
 {
-    #ifdef DYNASCROLL
-    if(dwDelta)
-    {
-        DWORD dwValue = 60000000 / syncplayer->tempo;
-        while(dwDelta--)
-            mmnotesync += dwValue;
-    }
-    #endif
-    
     if(!freelist_return)
         return;
     
@@ -767,7 +725,10 @@ static int WINAPI dwEventCallback(DWORD note)
         | (PlayerNotecatcher->CurrentTrack->trackid << 12)
     ;
     
-    MMTick curr = TICKVAR;
+    MMTick curr = PlayerNotecatcher->TickCounter;
+#ifdef DYNASCROLL
+    MMTick time = PlayerNotecatcher->RealTime;
+#endif
     
     struct ActiveNode* __restrict const active = &ActiveNoteList[uid];
     
@@ -801,7 +762,12 @@ static int WINAPI dwEventCallback(DWORD note)
         #endif
             
             if(!~backupnode->end)
+            {
+            #ifdef DYNASCROLL
+                backupnode->time_end = time;
+            #endif
                 backupnode->end = curr;
+            }
         }
         
         active->LastStartTime = curr;
@@ -831,6 +797,10 @@ static int WINAPI dwEventCallback(DWORD note)
         
         node->start = curr;
         node->end = ~0;
+    #ifdef DYNASCROLL
+        node->time_start = time;
+        // no need to set time_end, as logic still gates by the tick
+    #endif
         node->uid = uid;
         
         NoteAppend(node);
@@ -855,7 +825,12 @@ static int WINAPI dwEventCallback(DWORD note)
     #endif
         
         if(!~node->end)
+        {
+        #ifdef DYNASCROLL
+            node->time_end = time;
+        #endif
             node->end = curr;
+        }
         
     #ifndef OVERLAPREMOVE
         node = node->overlapped_voce;
@@ -963,13 +938,29 @@ static __attribute__((noinline)) void AddVtx(const NoteNode* __restrict localnod
     float offsr = rawoffs + 1;
     #endif
     
+    MMTick note_start =
+#ifdef DYNASCROLL
+        localnode->time_start
+#else
+        localnode->start
+#endif
+    ;
+    
     float offsy = -1.0F;
     //if(localnode.start > currtick)
-        offsy = ((float)((int)(localnode->start - currtick)) * tickscale) - 1.0F;
+        offsy = ((float)((s64)(note_start - currtick)) * tickscale) - 1.0F;
     float offst = 1.0F;
     if(~localnode->end)
     {
-        offst = ((float)((int)(localnode->end - currtick)) * tickscale) - 1.0F;
+        MMTick note_end =
+    #ifdef DYNASCROLL
+        localnode->time_end
+    #else
+        localnode->end
+    #endif
+        ;
+        
+        offst = ((float)((s64)(note_end - currtick)) * tickscale) - 1.0F;
     }
     
     AddRawVtx(offsy, offst, offsx, offsr, &LineTable[localnode->uid >> 8]);
@@ -1635,11 +1626,6 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     kNSOriginal = PlayerReal->KSyncFunc;
     PlayerReal->KShortMsg = kNPIntercept;
     PlayerReal->KSyncFunc = kNPSync;
-    #elif defined(DYNASCROLL)
-    PlayerReal->KSyncFunc = NoteSync;
-    
-    syncvalue = 0;
-    mmnotesync = 0;
     #endif
     
     #ifdef TIMI_CAPTURE
@@ -1753,51 +1739,38 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         drawnotesraw = 0;
         
+        ULONGLONG current_tick = PlayerReal->TickCounter;
         #ifdef DYNASCROLL
-        ULONGLONG notesync = mmnotesync;
-        ULONGLONG currtick = syncvalue;
+        ULONGLONG current_time = PlayerReal->RealTime;
+        ULONGLONG viewport_time_height = 500000;
         #else
-        ULONGLONG tickheight =
+        ULONGLONG current_time = current_tick;
+        ULONGLONG viewport_time_height =
         #ifdef CUSTOMTICK
-        CUSTOMTICK
-        ;
+            CUSTOMTICK
+            ;
         #else
-        (250000ull) * PlayerReal->timediv / (PlayerReal->tempo);
-        if(!tickheight)
-            tickheight = 1;
+            (500000ull) * PlayerReal->timediv / (PlayerReal->tempo)
+            ;
+        if(!viewport_time_height)
+            viewport_time_height = 1;
         #endif
-        ULONGLONG notesync = TICKVAR;
         ULONGLONG currtick = TICKVAL;
-        float tickscale = 1.0F / (float)tickheight;
         #endif
+        float viewport_scale = 2.0F / (float)viewport_time_height;
         
         #ifdef KEYBOARD
         currtimer = PlayerReal->RealTime;
         #endif
         
-        if(currtick && (currtick >= PlayerNotecatcher->TickCounter))
-            currtick = PlayerNotecatcher->TickCounter - 1;
+        // Cap maximum scroll depth, if the realtime player runs faster than the note catcher
+        if(current_tick && (current_tick >= PlayerNotecatcher->TickCounter))
+            current_tick = PlayerNotecatcher->TickCounter - 1;
         
-        #ifdef DYNASCROLL
-        BIND_IF(glUniform1f, uniGrTime, (float)(currtick / (double)tickheight * 0.25));
-        #else
         BIND_IF(glUniform1f, uniGrTime, (float)((double)(PlayerReal->RealTime) / 1e7));
-        #endif
         
-        ULONGLONG midtick = currtick + tickheight;
-        ULONGLONG toptick = midtick + tickheight;
+        ULONGLONG top_time = current_time + viewport_time_height;
         
-        
-        //printf("%10llu %10llu %i %u\n", notesync, currtick, (int)(notesync - currtick), PlayerReal->tempo);
-        
-        // ===[BAD IDEA NEVER UNCOMMENT THIS]===
-        /*if(!timeout && notesync < midtick)
-        {
-            midtick = notesync;
-            toptick = midtick + tickheight;
-            currtick = midtick - tickheight;
-        }*/
-        // ===[BAD IDEA NEVER UNCOMMENT THIS]===
         
         #if defined(HDR) && !defined(FASTHDR)
         #warning Fix this soon
@@ -1846,12 +1819,12 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                     debugnode.start = asdtick;
                     debugnode.end = asdtick + PlayerReal->timediv;
                     
-                    AddVtx(&debugnode, currtick, tickscale);
+                    AddVtx(&debugnode, currtick, viewport_scale);
                     
-                    //AddWideVtx(currtick, 2.0F, currtick, tickscale, asdi | (asdi << 8), 0xFF7F7F7F);
+                    //AddWideVtx(currtick, 2.0F, currtick, viewport_scale, asdi | (asdi << 8), 0xFF7F7F7F);
                 }
                 
-                AddWideVtx((ULONGLONG)asdtick, 1.0F / 64.0F, currtick, tickscale, 0x7F, -1);
+                AddWideVtx((ULONGLONG)asdtick, 1.0F / 64.0F, currtick, viewport_scale, 0x7F, -1);
                 
             }
             while((LONGLONG)(asdtick - toptick) < 0);
@@ -1865,7 +1838,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         NoteNode* __restrict currnote = VisibleNoteList;
         
         //loop over freeable notes first
-        while(currnote && currnote->start <= currtick) // already triggered
+        while(currnote && currnote->start <= current_tick) // already triggered
         {
         #ifdef KEYBOARD
             NoteNode* lmn = &KeyNotes[(BYTE)currnote->uid];
@@ -1880,13 +1853,13 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 lmn->start = 1000000;
         #endif
             
-            if(currnote->end > currtick) //note not finished yet
+            if(currnote->end > current_tick) //note not finished yet
             {
                 NoteNode* localnode = currnote;
                 prevnote = currnote;
                 currnote = localnode->next;
                 
-                AddVtx(localnode, currtick, tickscale);
+                AddVtx(localnode, current_time, viewport_scale);
             }
             else
             {
@@ -1933,13 +1906,24 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         }
         
         //loop over visible notes which don't require special processing
-        while(currnote && currnote->start < toptick)
+        while(currnote)
         {
             NoteNode* localnode = currnote;
             prevnote = currnote;
             currnote = localnode->next;
             
-            AddVtx(localnode, currtick, tickscale);
+            if
+            (
+        #ifdef DYNASCROLL
+                localnode->time_start
+        #else
+                localnode->start
+        #endif
+                >= top_time
+            )
+                break;
+            
+            AddVtx(localnode, current_time, viewport_scale);
         }
         
         if(vtxidx)
@@ -1947,10 +1931,11 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
         
         drawnotes = drawnotesraw + vtxidx;
         
-        #ifdef DEBUGTEXT
+        #if defined(DEBUGTEXT) && !defined(DYNASCROLL) /* DYNASCROLL breaks the ppq visualizer */
         BIND_IF(glUniform1f, attrGrNotemix, 0.0F);
         
-        LONGLONG debugtick = currtick - (currtick % PlayerReal->timediv) - PlayerReal->timediv - PlayerReal->timediv;
+        LONGLONG toptick = current_tick + (500000 * PlayerReal->timediv / PlayerReal->tempo) + 1;
+        LONGLONG debugtick = current_tick - (current_tick % PlayerReal->timediv) - PlayerReal->timediv - PlayerReal->timediv;
         do
         {
             debugtick += PlayerReal->timediv;
@@ -1961,9 +1946,9 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
             debugnode.start = debugtick;
             debugnode.end = debugtick + (PlayerReal->timediv >> 1) + (PlayerReal->timediv >> 2);
             
-            AddVtx(&debugnode, currtick, tickscale);
+            AddVtx(&debugnode, current_time, viewport_scale);
             
-            AddWideVtx((ULONGLONG)debugtick, 1.0F / 64.0F, currtick, tickscale, 0x7F, -1);
+            AddWideVtx((ULONGLONG)debugtick, 1.0F / 64.0F, current_time, viewport_scale, 0x7F, -1);
         }
         while((LONGLONG)(debugtick - toptick) < 0);
         
@@ -1988,7 +1973,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
                 vtxidx = 0;
             }
             
-            float pob = ((float)((int)(( TICKVAR ) - currtick)) * tickscale) - 1.0F;
+            float pob = ((float)((int)(( TICKVAR ) - currtick)) * viewport_scale) - 1.0F;
             float pos = 1.0F;
             
             quads[vtxidx].quads[0] = (struct quadpart){-1.0F, pos, 0x11111111};
