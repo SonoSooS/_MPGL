@@ -34,7 +34,7 @@ static MMTick mmtimer_get(struct MMTimer* __restrict timer, MMTick current_time,
         else
         {
             // clamp huge deviations to prevent math overflow
-            sleep_offset_error = want_delta_time;
+            sleep_offset_error = 0;
         }
         timer->sleep_offset_error = sleep_offset_error;
         timer->previous_wanted_elapsed_time = want_delta_time;
