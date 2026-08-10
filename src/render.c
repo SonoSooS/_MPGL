@@ -1577,7 +1577,7 @@ DWORD WINAPI RenderThread(PVOID lpParameter)
     glDisable(GL_BLEND);
     
     PlayerNotecatcher->SyncPtr = &PlayerReal->RealTime;
-    PlayerNotecatcher->SyncOffset = 50000000;
+    PlayerNotecatcher->SyncOffset = 5000000;
     PlayerNotecatcher->KShortMsg = dwEventCallback;
     PlayerNotecatcher->KLongMsg = 0;//LongMessage;
     PlayerNotecatcher->KSyncFunc = NoteReturn;
